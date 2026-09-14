@@ -1,6 +1,6 @@
 # 🌊 Aqua-Registro (MVP)
 
-**Aqua-Registro** es una aplicación móvil diseñada para resolver la desorganización en el registro manual de buzos y sus trabajos\[cite: 1\]. Su propósito es digitalizar el pre-chequeo de seguridad, validando la identidad del buzo, la revisión de sus equipos y la encuesta de salud antes de cada inmersión, centralizando toda la información para el Prevencionista de Riesgos.
+**Aqua-Registro** es una aplicación móvil diseñada para resolver la desorganización en el registro manual de buzos y sus trabajos Su propósito es digitalizar el pre-chequeo de seguridad, validando la identidad del buzo, la revisión de sus equipos y la encuesta de salud antes de cada inmersión, centralizando toda la información para el Prevencionista de Riesgos.
 
 
 ## 🎨 Identidad Visual
@@ -21,7 +21,7 @@ La interfaz está construida utilizando **Material Design 3** con la siguiente p
 
 A continuación, se presenta el Diagrama de Actividad UML con el recorrido principal del prevencionista dentro de la aplicación:
 
-```
+```mermaid
 stateDiagram-v2  
     \[\*\] --\> InicioDeSesion : Iniciar app  
       
