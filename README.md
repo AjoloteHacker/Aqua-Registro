@@ -1,4 +1,4 @@
-stateDiagram-v2
+```mermaid```
     [*] --> InicioDeSesion : Iniciar app
     
     InicioDeSesion --> DecisionLogin : Ingresar credenciales
