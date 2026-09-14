@@ -15,7 +15,7 @@ La interfaz está construida utilizando **Material Design 3** con la siguiente p
 
 
 ## 🗺️ Flujo de Usuario (UML)
-A continuación, se presenta el Diagrama de Actividad UML con el recorrido principal del prevencionista dentro de la aplicación[cite: 2]:
+A continuación, se presenta el Diagrama de Actividad UML con el recorrido principal del prevencionista dentro de la aplicación:
 
 ```mermaid
 stateDiagram-v2
