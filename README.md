@@ -12,9 +12,7 @@ La interfaz está construida utilizando **Material Design 3** con la siguiente p
 *   **Texto:** Negro (`#000000`) - Contraste principal[cite: 2].
 *   **Adicional:** Aqua (`#00FFFF`) - Color de apoyo[cite: 2].
 
-> **Logotipo:** Simboliza la producción de proteína y la actividad principal de la compañía. (Ubicado en `docs/diseno/`)[cite: 2].
 
----
 
 ## 🗺️ Flujo de Usuario (UML)
 A continuación, se presenta el Diagrama de Actividad UML con el recorrido principal del prevencionista dentro de la aplicación[cite: 2]:
