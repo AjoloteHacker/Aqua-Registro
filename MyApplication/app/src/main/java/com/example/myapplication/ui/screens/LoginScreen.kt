@@ -22,44 +22,36 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.myapplication.data.AppData
-import com.example.myapplication.data.Prevencionista
+import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(navController: NavController) {
-    // 0 = Iniciar Sesión, 1 = Registrar Usuario
-    var selectedTab by remember { mutableIntStateOf(0) }
-
-    // Estado Iniciar Sesión
-    var rutLogin by remember { mutableStateOf("12.345.678-9") }
-    var passwordLogin by remember { mutableStateOf("admin123") }
-    var passwordLoginVisible by remember { mutableStateOf(false) }
-
-    // Estado Registro de Usuario (Prevencionista)
-    var regNombre by remember { mutableStateOf("") }
-    var regRut by remember { mutableStateOf("") }
-    var regSeremi by remember { mutableStateOf("") }
-    var regCorreo by remember { mutableStateOf("") }
-    var regCentro by remember { mutableStateOf(AppData.centrosCultivo.firstOrNull() ?: "Centro Melinka 1 · Fiordo Aisén") }
+fun LoginScreen(
+    navController: NavController,
+    viewModel: AuthViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     var centroDropdownExpanded by remember { mutableStateOf(false) }
-    var regPassword by remember { mutableStateOf("") }
-    var regPasswordConfirm by remember { mutableStateOf("") }
-    var regPasswordVisible by remember { mutableStateOf(false) }
-    var regAceptaTerminos by remember { mutableStateOf(true) }
 
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successDialogMessage by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+        }
+    }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = AquaBackground
-    ) {
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = AquaBackground
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .padding(horizontal = 20.dp, vertical = 16.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -67,7 +59,6 @@ fun LoginScreen(navController: NavController) {
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Header con Identidad Visual Aqua-Registro
             Box(
                 modifier = Modifier
                     .size(80.dp)
@@ -104,10 +95,9 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Selector de Pestañas: Iniciar Sesión vs Registrar Usuario
             @Suppress("DEPRECATION")
             TabRow(
-                selectedTabIndex = selectedTab,
+                selectedTabIndex = uiState.selectedTab,
                 containerColor = Color.White,
                 contentColor = AquaPrimary,
                 modifier = Modifier
@@ -115,11 +105,8 @@ fun LoginScreen(navController: NavController) {
                     .clip(RoundedCornerShape(12.dp))
             ) {
                 Tab(
-                    selected = selectedTab == 0,
-                    onClick = {
-                        selectedTab = 0
-                        errorMessage = null
-                    },
+                    selected = uiState.selectedTab == 0,
+                    onClick = { viewModel.selectTab(0) },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -131,11 +118,8 @@ fun LoginScreen(navController: NavController) {
                     unselectedContentColor = AquaTextSecondary
                 )
                 Tab(
-                    selected = selectedTab == 1,
-                    onClick = {
-                        selectedTab = 1
-                        errorMessage = null
-                    },
+                    selected = uiState.selectedTab == 1,
+                    onClick = { viewModel.selectTab(1) },
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -150,7 +134,6 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Tarjeta de Formulario Principal
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -163,10 +146,7 @@ fun LoginScreen(navController: NavController) {
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (selectedTab == 0) {
-                        // ==========================================
-                        // PESTAÑA 1: INICIAR SESIÓN
-                        // ==========================================
+                    if (uiState.selectedTab == 0) {
                         Text(
                             text = "Acceso Prevencionista",
                             style = MaterialTheme.typography.titleMedium,
@@ -177,11 +157,8 @@ fun LoginScreen(navController: NavController) {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         OutlinedTextField(
-                            value = rutLogin,
-                            onValueChange = {
-                                rutLogin = it
-                                errorMessage = null
-                            },
+                            value = uiState.rutLogin,
+                            onValueChange = { viewModel.onRutLoginChange(it) },
                             label = { Text("RUT o Correo del Prevencionista") },
                             leadingIcon = {
                                 Icon(Icons.Default.Badge, contentDescription = "RUT", tint = AquaPrimary)
@@ -194,30 +171,27 @@ fun LoginScreen(navController: NavController) {
                         Spacer(modifier = Modifier.height(12.dp))
 
                         OutlinedTextField(
-                            value = passwordLogin,
-                            onValueChange = {
-                                passwordLogin = it
-                                errorMessage = null
-                            },
+                            value = uiState.passwordLogin,
+                            onValueChange = { viewModel.onPasswordLoginChange(it) },
                             label = { Text("Contraseña") },
                             leadingIcon = {
                                 Icon(Icons.Default.Lock, contentDescription = "Contraseña", tint = AquaPrimary)
                             },
                             trailingIcon = {
-                                IconButton(onClick = { passwordLoginVisible = !passwordLoginVisible }) {
+                                IconButton(onClick = { viewModel.togglePasswordLoginVisibility() }) {
                                     Icon(
-                                        imageVector = if (passwordLoginVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        imageVector = if (uiState.passwordLoginVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                         contentDescription = "Alternar Visibilidad"
                                     )
                                 }
                             },
-                            visualTransformation = if (passwordLoginVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            visualTransformation = if (uiState.passwordLoginVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp)
                         )
 
-                        if (errorMessage != null) {
+                        if (uiState.errorMessage != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Surface(
                                 color = SafetyCardBgDanger,
@@ -225,7 +199,7 @@ fun LoginScreen(navController: NavController) {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = errorMessage ?: "",
+                                    text = uiState.errorMessage ?: "",
                                     color = SafetyDanger,
                                     fontSize = 12.sp,
                                     modifier = Modifier.padding(8.dp)
@@ -237,19 +211,10 @@ fun LoginScreen(navController: NavController) {
 
                         Button(
                             onClick = {
-                                val usuarioEncontrado = AppData.usuarios.firstOrNull {
-                                    (it.rut.trim().equals(rutLogin.trim(), ignoreCase = true) ||
-                                     it.correo.trim().equals(rutLogin.trim(), ignoreCase = true)) &&
-                                    it.contrasena == passwordLogin
-                                }
-
-                                if (usuarioEncontrado != null) {
-                                    AppData.prevencionistaActivo = usuarioEncontrado
-                                    navController.navigate("menu") {
-                                        popUpTo("login") { inclusive = true }
+                                viewModel.login {
+                                    navController.navigate(Screen.Menu.route) {
+                                        popUpTo(Screen.Login.route) { inclusive = true }
                                     }
-                                } else {
-                                    errorMessage = "Credenciales inválidas. Verifique su RUT y contraseña o regístrese."
                                 }
                             },
                             modifier = Modifier
@@ -268,11 +233,9 @@ fun LoginScreen(navController: NavController) {
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Acceso rápido a registro
                         Row(
                             modifier = Modifier.clickable {
-                                selectedTab = 1
-                                errorMessage = null
+                                viewModel.selectTab(1)
                             },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -291,7 +254,6 @@ fun LoginScreen(navController: NavController) {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // Recordatorio de usuario demo
                         Surface(
                             color = AquaBackground,
                             shape = RoundedCornerShape(8.dp),
@@ -312,9 +274,6 @@ fun LoginScreen(navController: NavController) {
                         }
 
                     } else {
-                        // ==========================================
-                        // PESTAÑA 2: REGISTRAR USUARIO (PREVENCIONISTA)
-                        // ==========================================
                         Text(
                             text = "Alta de Prevencionista",
                             style = MaterialTheme.typography.titleMedium,
@@ -331,11 +290,8 @@ fun LoginScreen(navController: NavController) {
                         Spacer(modifier = Modifier.height(14.dp))
 
                         OutlinedTextField(
-                            value = regNombre,
-                            onValueChange = {
-                                regNombre = it
-                                errorMessage = null
-                            },
+                            value = uiState.regNombre,
+                            onValueChange = { viewModel.onRegNombreChange(it) },
                             label = { Text("Nombre Completo *") },
                             leadingIcon = {
                                 Icon(Icons.Default.Person, contentDescription = "Nombre", tint = AquaPrimary)
@@ -349,11 +305,8 @@ fun LoginScreen(navController: NavController) {
 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
-                                value = regRut,
-                                onValueChange = {
-                                    regRut = it
-                                    errorMessage = null
-                                },
+                                value = uiState.regRut,
+                                onValueChange = { viewModel.onRegRutChange(it) },
                                 label = { Text("RUT *") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f),
@@ -361,11 +314,8 @@ fun LoginScreen(navController: NavController) {
                             )
 
                             OutlinedTextField(
-                                value = regSeremi,
-                                onValueChange = {
-                                    regSeremi = it
-                                    errorMessage = null
-                                },
+                                value = uiState.regSeremi,
+                                onValueChange = { viewModel.onRegSeremiChange(it) },
                                 label = { Text("N° Reg. SEREMI *") },
                                 placeholder = { Text("PR-12345-X", fontSize = 11.sp) },
                                 singleLine = true,
@@ -377,11 +327,8 @@ fun LoginScreen(navController: NavController) {
                         Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedTextField(
-                            value = regCorreo,
-                            onValueChange = {
-                                regCorreo = it
-                                errorMessage = null
-                            },
+                            value = uiState.regCorreo,
+                            onValueChange = { viewModel.onRegCorreoChange(it) },
                             label = { Text("Correo Institucional *") },
                             leadingIcon = {
                                 Icon(Icons.Default.Email, contentDescription = "Correo", tint = AquaPrimary)
@@ -393,7 +340,6 @@ fun LoginScreen(navController: NavController) {
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Selector de Centro de Cultivo / Base
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { centroDropdownExpanded = true },
@@ -407,7 +353,7 @@ fun LoginScreen(navController: NavController) {
                                 ) {
                                     Column(horizontalAlignment = Alignment.Start) {
                                         Text("Base / Centro Operativo", fontSize = 10.sp, color = AquaTextSecondary)
-                                        Text(regCentro, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AquaTextPrimary)
+                                        Text(uiState.regCentro, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AquaTextPrimary)
                                     }
                                     Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
                                 }
@@ -416,11 +362,11 @@ fun LoginScreen(navController: NavController) {
                                 expanded = centroDropdownExpanded,
                                 onDismissRequest = { centroDropdownExpanded = false }
                             ) {
-                                AppData.centrosCultivo.forEach { c ->
+                                uiState.centrosDisponibles.forEach { c ->
                                     DropdownMenuItem(
                                         text = { Text(c, fontSize = 12.sp) },
                                         onClick = {
-                                            regCentro = c
+                                            viewModel.onRegCentroChange(c)
                                             centroDropdownExpanded = false
                                         }
                                     )
@@ -431,16 +377,21 @@ fun LoginScreen(navController: NavController) {
                         Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedTextField(
-                            value = regPassword,
-                            onValueChange = {
-                                regPassword = it
-                                errorMessage = null
-                            },
+                            value = uiState.regPassword,
+                            onValueChange = { viewModel.onRegPasswordChange(it) },
                             label = { Text("Contraseña (mínimo 4 caracteres) *") },
                             leadingIcon = {
                                 Icon(Icons.Default.Lock, contentDescription = "Contraseña", tint = AquaPrimary)
                             },
-                            visualTransformation = if (regPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { viewModel.toggleRegPasswordVisibility() }) {
+                                    Icon(
+                                        imageVector = if (uiState.regPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Alternar Visibilidad Contraseña"
+                                    )
+                                }
+                            },
+                            visualTransformation = if (uiState.regPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp)
@@ -449,16 +400,21 @@ fun LoginScreen(navController: NavController) {
                         Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedTextField(
-                            value = regPasswordConfirm,
-                            onValueChange = {
-                                regPasswordConfirm = it
-                                errorMessage = null
-                            },
+                            value = uiState.regPasswordConfirm,
+                            onValueChange = { viewModel.onRegPasswordConfirmChange(it) },
                             label = { Text("Confirmar Contraseña *") },
                             leadingIcon = {
                                 Icon(Icons.Default.Lock, contentDescription = "Confirmar Contraseña", tint = AquaPrimary)
                             },
-                            visualTransformation = if (regPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { viewModel.toggleRegPasswordVisibility() }) {
+                                    Icon(
+                                        imageVector = if (uiState.regPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Alternar Visibilidad Confirmación"
+                                    )
+                                }
+                            },
+                            visualTransformation = if (uiState.regPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp)
@@ -466,16 +422,15 @@ fun LoginScreen(navController: NavController) {
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Checkbox de términos y confidencialidad DIRECTEMAR
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { regAceptaTerminos = !regAceptaTerminos },
+                                .clickable { viewModel.onRegAceptaTerminosChange(!uiState.regAceptaTerminos) },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(
-                                checked = regAceptaTerminos,
-                                onCheckedChange = { regAceptaTerminos = it },
+                                checked = uiState.regAceptaTerminos,
+                                onCheckedChange = { viewModel.onRegAceptaTerminosChange(it) },
                                 colors = CheckboxDefaults.colors(checkedColor = AquaPrimary)
                             )
                             Text(
@@ -486,7 +441,7 @@ fun LoginScreen(navController: NavController) {
                             )
                         }
 
-                        if (errorMessage != null) {
+                        if (uiState.errorMessage != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Surface(
                                 color = SafetyCardBgDanger,
@@ -494,7 +449,7 @@ fun LoginScreen(navController: NavController) {
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = errorMessage ?: "",
+                                    text = uiState.errorMessage ?: "",
                                     color = SafetyDanger,
                                     fontSize = 12.sp,
                                     modifier = Modifier.padding(8.dp)
@@ -506,38 +461,7 @@ fun LoginScreen(navController: NavController) {
 
                         Button(
                             onClick = {
-                                if (regNombre.isBlank() || regRut.isBlank() || regSeremi.isBlank() || regCorreo.isBlank() || regPassword.isBlank()) {
-                                    errorMessage = "Por favor complete todos los campos obligatorios (*)."
-                                    return@Button
-                                }
-                                if (regPassword.length < 4) {
-                                    errorMessage = "La contraseña debe tener al menos 4 caracteres."
-                                    return@Button
-                                }
-                                if (regPassword != regPasswordConfirm) {
-                                    errorMessage = "Las contraseñas no coinciden."
-                                    return@Button
-                                }
-                                if (!regAceptaTerminos) {
-                                    errorMessage = "Debe aceptar el compromiso de confidencialidad y protocolos DIRECTEMAR."
-                                    return@Button
-                                }
-                                if (AppData.usuarios.any { it.rut.trim().equals(regRut.trim(), ignoreCase = true) }) {
-                                    errorMessage = "Ya existe un prevencionista registrado con el RUT $regRut."
-                                    return@Button
-                                }
-
-                                val nuevoPrev = Prevencionista(
-                                    nombre = regNombre.trim(),
-                                    rut = regRut.trim(),
-                                    correo = regCorreo.trim(),
-                                    registroSeremi = regSeremi.trim(),
-                                    centro = regCentro,
-                                    contrasena = regPassword
-                                )
-                                AppData.usuarios.add(nuevoPrev)
-                                AppData.prevencionistaActivo = nuevoPrev
-                                successDialogMessage = "Cuenta creada con éxito para ${nuevoPrev.nombre} (SEREMI: ${nuevoPrev.registroSeremi})"
+                                viewModel.registrar {}
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -559,8 +483,7 @@ fun LoginScreen(navController: NavController) {
 
                         Row(
                             modifier = Modifier.clickable {
-                                selectedTab = 0
-                                errorMessage = null
+                                viewModel.selectTab(0)
                             },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -583,7 +506,7 @@ fun LoginScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
-                text = "Versión 1.0 MVP · Grupo Smiling Friends",
+                text = "Versión 2.0 MVVM · Grupo Smiling Friends",
                 style = MaterialTheme.typography.labelSmall,
                 color = AquaTextSecondary
             )
@@ -591,23 +514,22 @@ fun LoginScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Diálogo de éxito al registrar usuario
-        if (successDialogMessage != null) {
+        if (uiState.successDialogMessage != null) {
             AlertDialog(
                 onDismissRequest = {
-                    successDialogMessage = null
-                    navController.navigate("menu") {
-                        popUpTo("login") { inclusive = true }
+                    viewModel.clearMessages()
+                    navController.navigate(Screen.Menu.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
                 title = { Text("¡Registro Exitoso!", fontWeight = FontWeight.Bold, color = SafetySuccess) },
-                text = { Text(successDialogMessage ?: "") },
+                text = { Text(uiState.successDialogMessage ?: "") },
                 confirmButton = {
                     Button(
                         onClick = {
-                            successDialogMessage = null
-                            navController.navigate("menu") {
-                                popUpTo("login") { inclusive = true }
+                            viewModel.clearMessages()
+                            navController.navigate(Screen.Menu.route) {
+                                popUpTo(Screen.Login.route) { inclusive = true }
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)

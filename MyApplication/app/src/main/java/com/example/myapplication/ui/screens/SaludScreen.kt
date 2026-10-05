@@ -16,52 +16,40 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.myapplication.data.AppData
-import com.example.myapplication.data.EstadoSalud
+import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.SaludViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SaludScreen(navController: NavController) {
-    var buzoIndex by remember { mutableIntStateOf(0) }
+fun SaludScreen(
+    navController: NavController,
+    onOpenDrawer: () -> Unit = {},
+    viewModel: SaludViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     var dropdownExpanded by remember { mutableStateOf(false) }
 
-    val buzoActual = AppData.buzos.getOrNull(buzoIndex)
-
-    var presionArterial by remember { mutableStateOf("120/80") }
-    var frecuenciaCardiaca by remember { mutableStateOf("72") }
-
-    var descansoAdecuado by remember { mutableStateOf(true) }
-    var sinSustancias by remember { mutableStateOf(true) }
-    var sinCongestion by remember { mutableStateOf(true) }
-    var condicionOptima by remember { mutableStateOf(true) }
-
-    val esApto = descansoAdecuado && sinSustancias && sinCongestion && condicionOptima
-
-    var mensajeResultado by remember { mutableStateOf<String?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(mensajeResultado) {
-        mensajeResultado?.let {
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let {
             snackbarHostState.showSnackbar(it)
-            mensajeResultado = null
+            viewModel.clearUserMessage()
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Encuesta de Salud Pre-Buceo", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AquaPrimary)
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+    AquaScaffold(
+        title = "Encuesta de Salud Pre-Buceo",
+        subtitle = "Evaluación Biomédica y Aptitud",
+        snackbarHostState = snackbarHostState,
+        onOpenDrawer = onOpenDrawer,
+        actions = {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
+            }
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -72,7 +60,6 @@ fun SaludScreen(navController: NavController) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Selector de Buzo
             Text(
                 text = "Buzo a Evaluar",
                 fontWeight = FontWeight.Bold,
@@ -93,7 +80,7 @@ fun SaludScreen(navController: NavController) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = buzoActual?.let { "🤿 ${it.nombre} (${it.rut})" } ?: "Seleccionar buzo",
+                            text = uiState.buzoSeleccionado?.let { "🤿 ${it.nombre} (${it.rut})" } ?: "Seleccionar buzo",
                             color = AquaTextPrimary,
                             fontWeight = FontWeight.Medium
                         )
@@ -104,11 +91,11 @@ fun SaludScreen(navController: NavController) {
                     expanded = dropdownExpanded,
                     onDismissRequest = { dropdownExpanded = false }
                 ) {
-                    AppData.buzos.forEachIndexed { idx, bz ->
+                    uiState.buzos.forEach { bz ->
                         DropdownMenuItem(
                             text = { Text("${bz.nombre} - ${bz.matricula}") },
                             onClick = {
-                                buzoIndex = idx
+                                viewModel.seleccionarBuzo(bz.id)
                                 dropdownExpanded = false
                             }
                         )
@@ -116,12 +103,11 @@ fun SaludScreen(navController: NavController) {
                 }
             }
 
-            // Banner Dinámico Apto / No Apto
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (esApto) SafetyCardBgSuccess else SafetyCardBgDanger
+                    containerColor = if (uiState.esApto) SafetyCardBgSuccess else SafetyCardBgDanger
                 )
             ) {
                 Row(
@@ -131,21 +117,21 @@ fun SaludScreen(navController: NavController) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (esApto) Icons.Default.VerifiedUser else Icons.Default.WarningAmber,
+                        imageVector = if (uiState.esApto) Icons.Default.VerifiedUser else Icons.Default.WarningAmber,
                         contentDescription = "Estado Apto",
-                        tint = if (esApto) SafetySuccess else SafetyDanger,
+                        tint = if (uiState.esApto) SafetySuccess else SafetyDanger,
                         modifier = Modifier.size(36.dp)
                     )
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (esApto) "ESTADO: APTO PARA INMERSIÓN" else "ESTADO: NO APTO (ALERTA)",
+                            text = if (uiState.esApto) "ESTADO: APTO PARA INMERSIÓN" else "ESTADO: NO APTO (ALERTA)",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = if (esApto) SafetySuccess else SafetyDanger
+                            color = if (uiState.esApto) SafetySuccess else SafetyDanger
                         )
                         Text(
-                            text = if (esApto)
+                            text = if (uiState.esApto)
                                 "El buzo cumple con todos los parámetros fisiológicos para faena."
                             else
                                 "Existen factores de riesgo físico. Se prohíbe el buceo hasta normalización.",
@@ -156,7 +142,6 @@ fun SaludScreen(navController: NavController) {
                 }
             }
 
-            // Sección 1: Parámetros Fisiológicos
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -180,15 +165,15 @@ fun SaludScreen(navController: NavController) {
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         OutlinedTextField(
-                            value = presionArterial,
-                            onValueChange = { presionArterial = it },
+                            value = uiState.presionArterial,
+                            onValueChange = { viewModel.onPresionChange(it) },
                             label = { Text("Presión (mmHg)") },
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
                         OutlinedTextField(
-                            value = frecuenciaCardiaca,
-                            onValueChange = { frecuenciaCardiaca = it },
+                            value = uiState.frecuenciaCardiaca,
+                            onValueChange = { viewModel.onFrecuenciaChange(it) },
                             label = { Text("Pulso (lpm)") },
                             modifier = Modifier.weight(1f),
                             singleLine = true
@@ -197,7 +182,6 @@ fun SaludScreen(navController: NavController) {
                 }
             }
 
-            // Sección 2: Cuestionario de Condición Pre-Buceo
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -218,59 +202,48 @@ fun SaludScreen(navController: NavController) {
 
                     PreguntaSaludSwitch(
                         pregunta = "¿Durmió mínimo 7 a 8 horas continuas de descanso?",
-                        checked = descansoAdecuado,
-                        onCheckedChange = { descansoAdecuado = it }
+                        checked = uiState.descansoAdecuado,
+                        onCheckedChange = { viewModel.onDescansoChange(it) }
                     )
 
                     HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
 
                     PreguntaSaludSwitch(
                         pregunta = "¿Libre de consumo de alcohol o medicamentos las últimas 12 hrs?",
-                        checked = sinSustancias,
-                        onCheckedChange = { sinSustancias = it }
+                        checked = uiState.sinSustancias,
+                        onCheckedChange = { viewModel.onSinSustanciasChange(it) }
                     )
 
                     HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
 
                     PreguntaSaludSwitch(
                         pregunta = "¿Libre de congestión nasal, dolor de oídos o mareos?",
-                        checked = sinCongestion,
-                        onCheckedChange = { sinCongestion = it }
+                        checked = uiState.sinCongestion,
+                        onCheckedChange = { viewModel.onSinCongestionChange(it) }
                     )
 
                     HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
 
                     PreguntaSaludSwitch(
                         pregunta = "¿Se siente en condiciones físicas y anímicas óptimas?",
-                        checked = condicionOptima,
-                        onCheckedChange = { condicionOptima = it }
+                        checked = uiState.condicionOptima,
+                        onCheckedChange = { viewModel.onCondicionOptimaChange(it) }
                     )
                 }
             }
 
-            // Botón de Registro
             Button(
-                onClick = {
-                    buzoActual?.let { buzo ->
-                        val nuevoEstado = if (esApto) EstadoSalud.APTO else EstadoSalud.NO_APTO
-                        buzo.estadoSalud = nuevoEstado
-                        buzo.ultimoChequeo = "Hoy - Presión: $presionArterial, Pulso: $frecuenciaCardiaca"
-                        mensajeResultado = if (esApto)
-                            "Chequeo registrado: ${buzo.nombre} declarado APTO"
-                        else
-                            "Alerta: ${buzo.nombre} registrado como NO APTO. Notificado a supervisor."
-                    }
-                },
+                onClick = { viewModel.guardarDictamen() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (esApto) AquaPrimary else SafetyDanger
+                    containerColor = if (uiState.esApto) AquaPrimary else SafetyDanger
                 )
             ) {
                 Text(
-                    text = if (esApto) "GUARDAR Y EMITIR DICTAMEN: APTO" else "GUARDAR DICTAMEN: NO APTO",
+                    text = if (uiState.esApto) "GUARDAR Y EMITIR DICTAMEN: APTO" else "GUARDAR DICTAMEN: NO APTO",
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )

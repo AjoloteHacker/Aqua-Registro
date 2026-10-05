@@ -16,46 +16,39 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.myapplication.data.AppData
-import com.example.myapplication.data.RegistroFaena
+import com.example.myapplication.data.model.RegistroFaena
+import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.HistorialViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistorialScreen(navController: NavController) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("Todas") }
+fun HistorialScreen(
+    navController: NavController,
+    onOpenDrawer: () -> Unit = {},
+    viewModel: HistorialViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    val faenasFiltradas = remember(searchQuery, selectedFilter, AppData.faenas.size) {
-        AppData.faenas.filter { faena ->
-            val coincideTexto = searchQuery.isBlank() ||
-                faena.buzoNombre.contains(searchQuery, ignoreCase = true) ||
-                faena.centroCultivo.contains(searchQuery, ignoreCase = true) ||
-                faena.tipoFaena.contains(searchQuery, ignoreCase = true) ||
-                faena.empresa.contains(searchQuery, ignoreCase = true)
-
-            val coincideFiltro = when (selectedFilter) {
-                "En Curso" -> faena.estado.contains("Curso", ignoreCase = true)
-                "Completada" -> faena.estado.contains("Completada", ignoreCase = true)
-                else -> true
-            }
-
-            coincideTexto && coincideFiltro
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearUserMessage()
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Historial de Inmersiones", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AquaPrimary)
-            )
+    AquaScaffold(
+        title = "Historial de Inmersiones",
+        subtitle = "Bitácora Digital Centralizada",
+        snackbarHostState = snackbarHostState,
+        onOpenDrawer = onOpenDrawer,
+        actions = {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
+            }
         }
     ) { padding ->
         Column(
@@ -65,11 +58,10 @@ fun HistorialScreen(navController: NavController) {
                 .background(AquaBackground)
                 .padding(16.dp)
         ) {
-            // Buscador
             OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                label = { Text("Buscar por buzo, centro o tipo de faena") },
+                value = uiState.searchQuery,
+                onValueChange = { viewModel.onSearchQueryChange(it) },
+                label = { Text("Buscar por folio, buzo, centro o faena") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar", tint = AquaPrimary) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -81,15 +73,14 @@ fun HistorialScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Chips de Filtro
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf("Todas", "En Curso", "Completada").forEach { filtro ->
                     FilterChip(
-                        selected = selectedFilter == filtro,
-                        onClick = { selectedFilter = filtro },
+                        selected = uiState.selectedFilter == filtro,
+                        onClick = { viewModel.onFilterChange(filtro) },
                         label = { Text(filtro, fontSize = 12.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = AquaSecondary.copy(alpha = 0.2f),
@@ -102,7 +93,7 @@ fun HistorialScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "Registros de Bitácora (${faenasFiltradas.size})",
+                text = "Registros de Bitácora (${uiState.faenasFiltradas.size})",
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
                 color = AquaTextPrimary
@@ -110,7 +101,7 @@ fun HistorialScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (faenasFiltradas.isEmpty()) {
+            if (uiState.faenasFiltradas.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -126,8 +117,11 @@ fun HistorialScreen(navController: NavController) {
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(faenasFiltradas) { faena ->
-                        FaenaCard(faena = faena)
+                    items(uiState.faenasFiltradas, key = { it.id }) { faena ->
+                        FaenaCard(
+                            faena = faena,
+                            onFinalizar = { viewModel.finalizarFaena(faena.id) }
+                        )
                     }
                 }
             }
@@ -136,7 +130,12 @@ fun HistorialScreen(navController: NavController) {
 }
 
 @Composable
-fun FaenaCard(faena: RegistroFaena) {
+fun FaenaCard(
+    faena: RegistroFaena,
+    onFinalizar: () -> Unit
+) {
+    val enCurso = faena.estado.contains("Curso", ignoreCase = true)
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -160,7 +159,6 @@ fun FaenaCard(faena: RegistroFaena) {
                     color = AquaPrimary
                 )
 
-                val enCurso = faena.estado.contains("Curso", ignoreCase = true)
                 Surface(
                     color = if (enCurso) AquaPrimary.copy(alpha = 0.12f) else SafetyCardBgSuccess,
                     shape = RoundedCornerShape(10.dp)
@@ -209,19 +207,35 @@ fun FaenaCard(faena: RegistroFaena) {
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Prof: ${faena.profundidadMetros}m · ${faena.tiempoMinutos} min",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AquaSecondary
-                )
-                Text(
-                    text = "🕒 ${faena.fechaHora}",
-                    fontSize = 11.sp,
-                    color = AquaTextSecondary
-                )
+                Column {
+                    Text(
+                        text = "Prof: ${faena.profundidadMetros}m · ${faena.tiempoMinutos} min",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AquaSecondary
+                    )
+                    Text(
+                        text = "🕒 ${faena.fechaHora}",
+                        fontSize = 11.sp,
+                        color = AquaTextSecondary
+                    )
+                }
+
+                if (enCurso) {
+                    OutlinedButton(
+                        onClick = onFinalizar,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetySuccess)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Finalizar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

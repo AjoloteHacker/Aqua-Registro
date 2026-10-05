@@ -3,7 +3,7 @@ package com.example.myapplication.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,52 +16,40 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.myapplication.data.AppData
-import com.example.myapplication.data.EquipoChequeo
+import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.EquiposViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EquiposScreen(navController: NavController) {
-    var buzoSeleccionado by remember {
-        mutableStateOf(AppData.buzos.firstOrNull()?.nombre ?: "Sin buzo")
-    }
+fun EquiposScreen(
+    navController: NavController,
+    onOpenDrawer: () -> Unit = {},
+    viewModel: EquiposViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     var dropdownBuzoExpanded by remember { mutableStateOf(false) }
 
-    val listaEquipos = remember {
-        mutableStateListOf<EquipoChequeo>().apply {
-            addAll(AppData.obtenerEquiposDefault())
-        }
-    }
-
-    val totalEquipos = listaEquipos.size
-    val equiposValidados = listaEquipos.count { it.verificado }
-    val esConforme = equiposValidados == totalEquipos
-
-    var snackbarMessage by remember { mutableStateOf<String?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(snackbarMessage) {
-        snackbarMessage?.let {
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let {
             snackbarHostState.showSnackbar(it)
-            snackbarMessage = null
+            viewModel.clearUserMessage()
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Control de Equipos", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AquaPrimary)
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+    AquaScaffold(
+        title = "Control de Equipos",
+        subtitle = "Checklist Técnico Obligatorio",
+        snackbarHostState = snackbarHostState,
+        onOpenDrawer = onOpenDrawer,
+        actions = {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
+            }
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -70,7 +58,6 @@ fun EquiposScreen(navController: NavController) {
                 .background(AquaBackground)
                 .padding(16.dp)
         ) {
-            // Selector de Buzo
             Text(
                 text = "Buzo Asignado para Chequeo",
                 fontWeight = FontWeight.Bold,
@@ -91,7 +78,11 @@ fun EquiposScreen(navController: NavController) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "🤿 $buzoSeleccionado", color = AquaTextPrimary, fontWeight = FontWeight.Medium)
+                        Text(
+                            text = uiState.buzoSeleccionado?.let { "🤿 ${it.nombre} (${it.empresa})" } ?: "Seleccionar buzo",
+                            color = AquaTextPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
                         Icon(Icons.Default.ArrowDropDown, contentDescription = "Seleccionar buzo")
                     }
                 }
@@ -99,11 +90,11 @@ fun EquiposScreen(navController: NavController) {
                     expanded = dropdownBuzoExpanded,
                     onDismissRequest = { dropdownBuzoExpanded = false }
                 ) {
-                    AppData.buzos.forEach { buzo ->
+                    uiState.buzos.forEach { buzo ->
                         DropdownMenuItem(
                             text = { Text("${buzo.nombre} (${buzo.empresa})") },
                             onClick = {
-                                buzoSeleccionado = buzo.nombre
+                                viewModel.seleccionarBuzo(buzo.id)
                                 dropdownBuzoExpanded = false
                             }
                         )
@@ -113,12 +104,11 @@ fun EquiposScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Banner de Estado
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (esConforme) SafetyCardBgSuccess else SafetyCardBgDanger
+                    containerColor = if (uiState.esConforme) SafetyCardBgSuccess else SafetyCardBgDanger
                 )
             ) {
                 Row(
@@ -128,21 +118,21 @@ fun EquiposScreen(navController: NavController) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (esConforme) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        imageVector = if (uiState.esConforme) Icons.Default.CheckCircle else Icons.Default.Warning,
                         contentDescription = "Estado",
-                        tint = if (esConforme) SafetySuccess else SafetyDanger,
+                        tint = if (uiState.esConforme) SafetySuccess else SafetyDanger,
                         modifier = Modifier.size(28.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (esConforme) "EQUIPAMIENTO 100% VERIFICADO" else "REVISIÓN INCOMPLETA",
+                            text = if (uiState.esConforme) "EQUIPAMIENTO 100% VERIFICADO" else "REVISIÓN INCOMPLETA",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = if (esConforme) SafetySuccess else SafetyDanger
+                            color = if (uiState.esConforme) SafetySuccess else SafetyDanger
                         )
                         Text(
-                            text = "$equiposValidados de $totalEquipos implementos verificados en terreno",
+                            text = "${uiState.equiposValidados} de ${uiState.totalEquipos} implementos verificados y guardados",
                             fontSize = 12.sp,
                             color = AquaTextSecondary
                         )
@@ -152,42 +142,35 @@ fun EquiposScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Botón de marcar todos
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Lista de Verificación Obligatoria",
+                    text = "Lista de Verificación (Norma Armada)",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = AquaTextPrimary
                 )
                 TextButton(
-                    onClick = {
-                        val marcar = !esConforme
-                        listaEquipos.forEachIndexed { i, eq ->
-                            listaEquipos[i] = eq.copy(verificado = marcar)
-                        }
-                    }
+                    onClick = { viewModel.alternarMarcarTodos() }
                 ) {
                     Text(
-                        text = if (esConforme) "Desmarcar todos" else "Marcar todos",
+                        text = if (uiState.esConforme) "Desmarcar todos" else "Marcar todos",
                         fontSize = 12.sp,
                         color = AquaPrimary
                     )
                 }
             }
 
-            // Lista de Checkbox
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                itemsIndexed(listaEquipos) { index, item ->
+                items(uiState.equipos, key = { it.id }) { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
@@ -203,7 +186,7 @@ fun EquiposScreen(navController: NavController) {
                             Checkbox(
                                 checked = item.verificado,
                                 onCheckedChange = { isChecked ->
-                                    listaEquipos[index] = item.copy(verificado = isChecked)
+                                    viewModel.toggleEquipo(item.id, isChecked)
                                 },
                                 colors = CheckboxDefaults.colors(checkedColor = AquaSecondary)
                             )
@@ -230,23 +213,17 @@ fun EquiposScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(10.dp))
 
             Button(
-                onClick = {
-                    if (esConforme) {
-                        snackbarMessage = "Equipos de $buzoSeleccionado aprobados exitosamente"
-                    } else {
-                        snackbarMessage = "Atención: Debe completar la verificación de todos los equipos antes de la inmersión"
-                    }
-                },
+                onClick = { viewModel.guardarConformidad() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (esConforme) AquaPrimary else AquaSecondary
+                    containerColor = if (uiState.esConforme) AquaPrimary else AquaSecondary
                 )
             ) {
                 Text(
-                    text = if (esConforme) "GUARDAR CONFORMIDAD DE EQUIPOS" else "GUARDAR ESTADO PARCIAL",
+                    text = if (uiState.esConforme) "GUARDAR CONFORMIDAD DE EQUIPOS" else "GUARDAR ESTADO PARCIAL",
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
