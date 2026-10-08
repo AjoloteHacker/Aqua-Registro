@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.update
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.example.myapplication.data.model.EtapaComprobacion
+import com.example.myapplication.data.model.RevisionEquipo
 
 /**
  * Repositorio central de la aplicación.
@@ -235,4 +237,17 @@ class AquaRepository private constructor() {
             }
         }
     }
-}
+    // Dentro de AquaRepository
+    private val revisiones = mutableMapOf<Triple<String, EtapaComprobacion, String>, RevisionEquipo>()
+    private val etapasConfirmadas = mutableSetOf<Pair<String, EtapaComprobacion>>()
+
+    fun obtenerRevisiones(buzoId: String, etapa: EtapaComprobacion): List<RevisionEquipo> =
+        revisiones.filterKeys { it.first == buzoId && it.second == etapa }.values.toList()
+
+    fun guardarRevision(buzoId: String, etapa: EtapaComprobacion, revision: RevisionEquipo) {
+        revisiones[Triple(buzoId, etapa, revision.equipoId)] = revision
+    }
+
+    fun confirmarEtapa(buzoId: String, etapa: EtapaComprobacion) {
+        etapasConfirmadas += buzoId to etapa
+    }}
