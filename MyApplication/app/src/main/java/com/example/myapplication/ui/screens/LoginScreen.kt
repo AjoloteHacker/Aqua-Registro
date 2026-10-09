@@ -266,7 +266,7 @@ fun LoginScreen(
                                 Icon(Icons.Default.Info, contentDescription = null, tint = AquaSecondary, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Demo: 12.345.678-9 / admin123",
+                                    text = "Demo: 12.345.678-5 / admin123",
                                     fontSize = 11.sp,
                                     color = AquaTextSecondary
                                 )
@@ -379,7 +379,7 @@ fun LoginScreen(
                         OutlinedTextField(
                             value = uiState.regPassword,
                             onValueChange = { viewModel.onRegPasswordChange(it) },
-                            label = { Text("Contraseña (mínimo 4 caracteres) *") },
+                            label = { Text("Contraseña (mín. 8 chars, Mayús/Minús/Núm) *") },
                             leadingIcon = {
                                 Icon(Icons.Default.Lock, contentDescription = "Contraseña", tint = AquaPrimary)
                             },

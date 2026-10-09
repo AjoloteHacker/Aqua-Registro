@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.model.Buzo
 import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.util.Rutificador
+import com.example.myapplication.util.SecurityUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -72,21 +74,32 @@ class BuzoViewModel(
     }
 
     fun onNuevoNombreChange(v: String) = _uiState.update { it.copy(nuevoNombre = v, error = null) }
-    fun onNuevoRutChange(v: String) = _uiState.update { it.copy(nuevoRut = v, error = null) }
+    fun onNuevoRutChange(v: String) {
+        val filtrado = v.filter { it.isDigit() || it.equals('k', ignoreCase = true) || it == '.' || it == '-' }
+        _uiState.update { it.copy(nuevoRut = filtrado, error = null) }
+    }
     fun onNuevaMatriculaChange(v: String) = _uiState.update { it.copy(nuevaMatricula = v, error = null) }
     fun onNuevoTelefonoChange(v: String) = _uiState.update { it.copy(nuevoTelefono = v, error = null) }
     fun onEmpresaSeleccionadaChange(v: String) = _uiState.update { it.copy(empresaSeleccionada = v) }
 
     fun agregarBuzo() {
         val state = _uiState.value
-        if (state.nuevoNombre.isBlank() || state.nuevoRut.isBlank()) {
-            _uiState.update { it.copy(error = "El nombre y el RUT son obligatorios.") }
+        val (nombreOk, nombreError) = SecurityUtils.validarNombre(state.nuevoNombre)
+        if (!nombreOk) {
+            _uiState.update { it.copy(error = nombreError) }
             return
         }
 
+        val (rutOk, rutError) = SecurityUtils.validarRut(state.nuevoRut)
+        if (!rutOk) {
+            _uiState.update { it.copy(error = rutError) }
+            return
+        }
+
+        val rutFormateado = Rutificador.formatear(state.nuevoRut)
         val nuevo = Buzo(
             id = (state.buzos.size + 1).toString(),
-            rut = state.nuevoRut.trim(),
+            rut = rutFormateado,
             nombre = state.nuevoNombre.trim(),
             empresa = state.empresaSeleccionada,
             matricula = if (state.nuevaMatricula.isBlank()) "Buzo Comercial N° ${1000 + state.buzos.size}" else state.nuevaMatricula.trim(),

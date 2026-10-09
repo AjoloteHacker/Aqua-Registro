@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.WaterDrop
@@ -97,50 +99,58 @@ fun AquaDrawerContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+        ) {
+            Spacer(modifier = Modifier.height(10.dp))
 
-        Text(
-            text = "MÓDULOS DE SEGURIDAD",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            color = AquaTextSecondary,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-        )
-
-        Screen.drawerScreens.forEach { screen ->
-            val isSelected = currentRoute == screen.route
-            NavigationDrawerItem(
-                label = {
-                    Text(
-                        text = screen.title,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 14.sp
-                    )
-                },
-                icon = {
-                    screen.icon?.let { icon ->
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = screen.title,
-                            tint = if (isSelected) AquaPrimary else AquaTextSecondary
-                        )
-                    }
-                },
-                selected = isSelected,
-                onClick = { onNavigate(screen) },
-                modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 2.dp)
-                    .clip(RoundedCornerShape(12.dp)),
-                colors = NavigationDrawerItemDefaults.colors(
-                    selectedContainerColor = AquaPrimary.copy(alpha = 0.12f),
-                    selectedTextColor = AquaPrimary,
-                    unselectedTextColor = AquaTextPrimary,
-                    unselectedIconColor = AquaTextSecondary
-                )
+            Text(
+                text = "MÓDULOS DE SEGURIDAD",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = AquaTextSecondary,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
+
+            Screen.drawerScreens.forEach { screen ->
+                val isSelected = currentRoute == screen.route
+                NavigationDrawerItem(
+                    label = {
+                        Text(
+                            text = screen.title,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 14.sp
+                        )
+                    },
+                    icon = {
+                        screen.icon?.let { icon ->
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = screen.title,
+                                tint = if (isSelected) AquaPrimary else AquaTextSecondary
+                            )
+                        }
+                    },
+                    selected = isSelected,
+                    onClick = { onNavigate(screen) },
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    colors = NavigationDrawerItemDefaults.colors(
+                        selectedContainerColor = AquaPrimary.copy(alpha = 0.12f),
+                        selectedTextColor = AquaPrimary,
+                        unselectedTextColor = AquaTextPrimary,
+                        unselectedIconColor = AquaTextSecondary
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
-        Spacer(modifier = Modifier.weight(1f))
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
         NavigationDrawerItem(

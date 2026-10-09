@@ -38,7 +38,6 @@ fun MenuScreen(
     val faenas by repository.faenas.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedBottomTab by remember { mutableIntStateOf(0) }
 
     AquaScaffold(
         title = "Aqua-Registro",
@@ -56,51 +55,6 @@ fun MenuScreen(
                     imageVector = Icons.AutoMirrored.Filled.Logout,
                     contentDescription = "Cerrar Sesión",
                     tint = Color.White
-                )
-            }
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = Color.White,
-                tonalElevation = 8.dp
-            ) {
-                NavigationBarItem(
-                    selected = selectedBottomTab == 0,
-                    onClick = { selectedBottomTab = 0 },
-                    icon = { Icon(Icons.Default.Dashboard, contentDescription = "Inicio") },
-                    label = { Text("Inicio") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = AquaPrimary,
-                        selectedTextColor = AquaPrimary,
-                        indicatorColor = AquaPrimary.copy(alpha = 0.15f)
-                    )
-                )
-                NavigationBarItem(
-                    selected = selectedBottomTab == 1,
-                    onClick = {
-                        selectedBottomTab = 1
-                        navController.navigate(Screen.Buzo.route)
-                    },
-                    icon = { Icon(Icons.Default.People, contentDescription = "Buzos") },
-                    label = { Text("Buzos") }
-                )
-                NavigationBarItem(
-                    selected = selectedBottomTab == 2,
-                    onClick = {
-                        selectedBottomTab = 2
-                        navController.navigate(Screen.Trabajo.route)
-                    },
-                    icon = { Icon(Icons.Default.Engineering, contentDescription = "Faena") },
-                    label = { Text("Faena") }
-                )
-                NavigationBarItem(
-                    selected = selectedBottomTab == 3,
-                    onClick = {
-                        selectedBottomTab = 3
-                        navController.navigate(Screen.Historial.route)
-                    },
-                    icon = { Icon(Icons.Default.History, contentDescription = "Historial") },
-                    label = { Text("Historial") }
                 )
             }
         }

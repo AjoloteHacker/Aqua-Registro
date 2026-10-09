@@ -1,6 +1,7 @@
 package com.example.myapplication.data.repository
 
 import com.example.myapplication.data.model.*
+import com.example.myapplication.util.Rutificador
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,7 +43,7 @@ class AquaRepository private constructor() {
         listOf(
             Prevencionista(
                 nombre = "Cristóbal Loncón C.",
-                rut = "12.345.678-9",
+                rut = "12.345.678-5",
                 correo = "c.loncon@aquachile.com",
                 registroSeremi = "PR-10892-X",
                 centro = "Centro Melinka 1 - Canal Moraleda",
@@ -59,7 +60,7 @@ class AquaRepository private constructor() {
         listOf(
             Buzo(
                 id = "1",
-                rut = "15.489.231-4",
+                rut = "15.489.231-1",
                 nombre = "Carlos Soto Paredes",
                 empresa = "Servicios Submarinos Austral SpA",
                 matricula = "Buzo Comercial N° 2394",
@@ -69,7 +70,7 @@ class AquaRepository private constructor() {
             ),
             Buzo(
                 id = "2",
-                rut = "17.912.445-K",
+                rut = "17.912.453-K",
                 nombre = "Pedro Almonacid Vera",
                 empresa = "AquaSub Chile Limitada",
                 matricula = "Buzo Básico N° 5812",
@@ -79,7 +80,7 @@ class AquaRepository private constructor() {
             ),
             Buzo(
                 id = "3",
-                rut = "16.320.108-7",
+                rut = "16.320.108-9",
                 nombre = "Rodrigo Mansilla Cárdenas",
                 empresa = "Buceos del Sur S.A.",
                 matricula = "Buzo Especialista N° 1042",
@@ -123,10 +124,13 @@ class AquaRepository private constructor() {
 
     // Autenticación
     fun login(rutOCorreo: String, contrasena: String): Result<Prevencionista> {
-        val limpio = rutOCorreo.trim()
+        val entrada = rutOCorreo.trim()
+        val rutNormalizado = Rutificador.limpiar(entrada)
         val usuario = _usuarios.value.firstOrNull {
-            (it.rut.equals(limpio, ignoreCase = true) || it.correo.equals(limpio, ignoreCase = true)) &&
-                    it.contrasena == contrasena
+            (it.correo.equals(entrada, ignoreCase = true) ||
+             it.rut.equals(entrada, ignoreCase = true) ||
+             (rutNormalizado.isNotBlank() && Rutificador.limpiar(it.rut) == rutNormalizado)) &&
+             it.contrasena == contrasena
         }
         return if (usuario != null) {
             _prevencionistaActivo.value = usuario
@@ -137,14 +141,36 @@ class AquaRepository private constructor() {
     }
 
     fun registrarPrevencionista(nuevo: Prevencionista): Result<Prevencionista> {
-        val existe = _usuarios.value.any { it.rut.equals(nuevo.rut.trim(), ignoreCase = true) }
-        return if (existe) {
-            Result.failure(IllegalArgumentException("Ya existe un prevencionista registrado con el RUT ${nuevo.rut}"))
-        } else {
-            _usuarios.update { it + nuevo }
-            _prevencionistaActivo.value = nuevo
-            Result.success(nuevo)
+        val rutLimpio = Rutificador.limpiar(nuevo.rut)
+        val existeRut = _usuarios.value.any { Rutificador.limpiar(it.rut) == rutLimpio }
+        if (existeRut) {
+            return Result.failure(IllegalArgumentException("Ya existe un prevencionista registrado con el RUT ${nuevo.rut}"))
         }
+        val correoLimpio = nuevo.correo.trim()
+        val existeCorreo = _usuarios.value.any { it.correo.equals(correoLimpio, ignoreCase = true) }
+        if (existeCorreo) {
+            return Result.failure(IllegalArgumentException("Ya existe un prevencionista registrado con el correo $correoLimpio"))
+        }
+
+        val formateado = nuevo.copy(
+            nombre = nuevo.nombre.trim(),
+            rut = Rutificador.formatear(nuevo.rut),
+            correo = correoLimpio,
+            registroSeremi = nuevo.registroSeremi.trim().uppercase()
+        )
+        _usuarios.update { it + formateado }
+        _prevencionistaActivo.value = formateado
+        return Result.success(formateado)
+    }
+
+    fun existeRutPrevencionista(rut: String): Boolean {
+        val rutLimpio = Rutificador.limpiar(rut)
+        return _usuarios.value.any { Rutificador.limpiar(it.rut) == rutLimpio }
+    }
+
+    fun existeCorreoPrevencionista(correo: String): Boolean {
+        val correoLimpio = correo.trim()
+        return _usuarios.value.any { it.correo.equals(correoLimpio, ignoreCase = true) }
     }
 
     fun logout() {
@@ -153,14 +179,18 @@ class AquaRepository private constructor() {
 
     // Buzos
     fun agregarBuzo(buzo: Buzo): Result<Buzo> {
-        val existe = _buzos.value.any { it.rut.equals(buzo.rut.trim(), ignoreCase = true) }
-        return if (existe) {
-            Result.failure(IllegalArgumentException("Ya existe un buzo con el RUT ${buzo.rut}"))
-        } else {
-            val buzoConId = if (buzo.id.isBlank()) buzo.copy(id = (_buzos.value.size + 1).toString()) else buzo
-            _buzos.update { it + buzoConId }
-            Result.success(buzoConId)
+        val rutLimpio = Rutificador.limpiar(buzo.rut)
+        val existe = _buzos.value.any { Rutificador.limpiar(it.rut) == rutLimpio }
+        if (existe) {
+            return Result.failure(IllegalArgumentException("Ya existe un buzo registrado con el RUT ${buzo.rut}"))
         }
+        val buzoConId = if (buzo.id.isBlank()) buzo.copy(id = (_buzos.value.size + 1).toString()) else buzo
+        val buzoFormateado = buzoConId.copy(
+            rut = Rutificador.formatear(buzo.rut),
+            nombre = buzo.nombre.trim()
+        )
+        _buzos.update { it + buzoFormateado }
+        return Result.success(buzoFormateado)
     }
 
     fun actualizarSaludBuzo(buzoId: String, nuevoEstado: EstadoSalud, ultimoChequeo: String): Result<Unit> {

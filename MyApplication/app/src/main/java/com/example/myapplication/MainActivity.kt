@@ -64,10 +64,16 @@ fun AquaRegistroApp(
                     usuario = usuarioActivo,
                     onNavigate = { screen ->
                         coroutineScope.launch { drawerState.close() }
-                        navController.navigate(screen.route) {
-                            popUpTo(Screen.Menu.route) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
+                        if (currentRoute != screen.route) {
+                            if (screen.route == Screen.Menu.route) {
+                                navController.popBackStack(Screen.Menu.route, inclusive = false)
+                            } else {
+                                navController.navigate(screen.route) {
+                                    popUpTo(Screen.Menu.route) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
                         }
                     },
                     onLogout = {

@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.model.Prevencionista
 import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.util.Rutificador
+import com.example.myapplication.util.SecurityUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,7 +14,7 @@ import kotlinx.coroutines.launch
 
 data class AuthUiState(
     val selectedTab: Int = 0,
-    val rutLogin: String = "12.345.678-9",
+    val rutLogin: String = "12.345.678-5",
     val passwordLogin: String = "admin123",
     val passwordLoginVisible: Boolean = false,
 
@@ -66,15 +68,16 @@ class AuthViewModel(
     }
 
     fun onRegRutChange(value: String) {
-        _uiState.update { it.copy(regRut = value, errorMessage = null) }
+        val filtrado = value.filter { it.isDigit() || it.equals('k', ignoreCase = true) || it == '.' || it == '-' }
+        _uiState.update { it.copy(regRut = filtrado, errorMessage = null) }
     }
 
     fun onRegSeremiChange(value: String) {
-        _uiState.update { it.copy(regSeremi = value, errorMessage = null) }
+        _uiState.update { it.copy(regSeremi = value.uppercase(), errorMessage = null) }
     }
 
     fun onRegCorreoChange(value: String) {
-        _uiState.update { it.copy(regCorreo = value, errorMessage = null) }
+        _uiState.update { it.copy(regCorreo = value.trim(), errorMessage = null) }
     }
 
     fun onRegCentroChange(value: String) {
@@ -122,20 +125,62 @@ class AuthViewModel(
 
     fun registrar(onSuccess: () -> Unit) {
         val state = _uiState.value
-        if (state.regNombre.isBlank() || state.regRut.isBlank() || state.regSeremi.isBlank() ||
-            state.regCorreo.isBlank() || state.regPassword.isBlank()
-        ) {
-            _uiState.update { it.copy(errorMessage = "Por favor complete todos los campos obligatorios (*).") }
+
+        // 1. Validación de Nombre Completo
+        val (nombreOk, nombreError) = SecurityUtils.validarNombre(state.regNombre)
+        if (!nombreOk) {
+            _uiState.update { it.copy(errorMessage = nombreError) }
             return
         }
-        if (state.regPassword.length < 4) {
-            _uiState.update { it.copy(errorMessage = "La contraseña debe tener al menos 4 caracteres.") }
+
+        // 2. Validación de RUT con Módulo 11 (Rutificador)
+        val (rutOk, rutError) = SecurityUtils.validarRut(state.regRut)
+        if (!rutOk) {
+            _uiState.update { it.copy(errorMessage = rutError) }
             return
         }
-        if (state.regPassword != state.regPasswordConfirm) {
-            _uiState.update { it.copy(errorMessage = "Las contraseñas no coinciden.") }
+
+        // 3. Validación de unicidad de RUT
+        if (repository.existeRutPrevencionista(state.regRut)) {
+            _uiState.update { it.copy(errorMessage = "Ya existe un prevencionista registrado con el RUT ${Rutificador.formatear(state.regRut)}.") }
             return
         }
+
+        // 4. Validación de Registro SEREMI
+        val (seremiOk, seremiError) = SecurityUtils.validarRegistroSeremi(state.regSeremi)
+        if (!seremiOk) {
+            _uiState.update { it.copy(errorMessage = seremiError) }
+            return
+        }
+
+        // 5. Validación de Correo Institucional
+        val (emailOk, emailError) = SecurityUtils.validarEmail(state.regCorreo)
+        if (!emailOk) {
+            _uiState.update { it.copy(errorMessage = emailError) }
+            return
+        }
+
+        // 6. Validación de unicidad de Correo
+        if (repository.existeCorreoPrevencionista(state.regCorreo)) {
+            _uiState.update { it.copy(errorMessage = "Ya existe un usuario registrado con el correo ${state.regCorreo.trim()}.") }
+            return
+        }
+
+        // 7. Validación de Contraseña
+        val (passOk, passError) = SecurityUtils.validarPassword(state.regPassword)
+        if (!passOk) {
+            _uiState.update { it.copy(errorMessage = passError) }
+            return
+        }
+
+        // 8. Confirmación de Contraseña
+        val (confirmOk, confirmError) = SecurityUtils.validarPasswordConfirm(state.regPassword, state.regPasswordConfirm)
+        if (!confirmOk) {
+            _uiState.update { it.copy(errorMessage = confirmError) }
+            return
+        }
+
+        // 9. Términos y condiciones
         if (!state.regAceptaTerminos) {
             _uiState.update { it.copy(errorMessage = "Debe aceptar el compromiso de confidencialidad y protocolos DIRECTEMAR.") }
             return
@@ -143,9 +188,9 @@ class AuthViewModel(
 
         val nuevo = Prevencionista(
             nombre = state.regNombre.trim(),
-            rut = state.regRut.trim(),
+            rut = Rutificador.formatear(state.regRut),
             correo = state.regCorreo.trim(),
-            registroSeremi = state.regSeremi.trim(),
+            registroSeremi = state.regSeremi.trim().uppercase(),
             centro = state.regCentro,
             contrasena = state.regPassword
         )
