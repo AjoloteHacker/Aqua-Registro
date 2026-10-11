@@ -11,7 +11,7 @@ import androidx.compose.ui.graphics.Color
  */
 
 /** Azul claro principal (#0099FF): Barra superior, botones primarios y branding. */
-val AquaPrimary = Color(0xFF0099FF)
+val AquaPrimary = Color(0xFF00BCD4)
 
 /** Verde-agua secundario (#00CCCC): Botón flotante FAB, switches activos y acentos marinos. */
 val AquaSecondary = Color(0xFF00CCCC)

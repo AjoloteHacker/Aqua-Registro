@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.time.LocalDate
 
 /**
  * =============================================================================
@@ -66,7 +67,7 @@ data class Buzo(
     val matricula: String,
     val telefono: String,
     var estadoSalud: EstadoSalud = EstadoSalud.PENDIENTE,
-    var ultimoChequeo: String = "No realizado hoy"
+    var ultimoChequeo: LocalDate? = null
 )
 
 /**
@@ -120,6 +121,44 @@ data class RegistroFaena(
 
 /**
  * =============================================================================
+ * Chequeo
+ * =============================================================================
+ * Entidad que modela el registro de chequeo biomédico y evaluación de salud
+ * pre-inmersión para un buzo profesional o comercial.
+ *
+ * @property id Identificador único del registro de chequeo.
+ * @property buzoRut Cédula de identidad (RUT) del buzo evaluado.
+ * @property fecha Fecha en la que se realizó la evaluación médica.
+ * @property esApto Dictamen final de aptitud para el buceo (true si es apto, false de lo contrario).
+ * @property pesoKg Peso del buzo en kilogramos.
+ * @property tallaM Talla o estatura del buzo en metros.
+ * @property colesterolTotal Nivel de colesterol total (mg/dl).
+ * @property hdl Nivel de colesterol HDL (mg/dl).
+ * @property ldl Nivel de colesterol LDL (mg/dl).
+ * @property trigliceridos Nivel de triglicéridos (mg/dl).
+ * @property hemograma Indicador del estado del examen de hemograma.
+ * @property glicemiaBasal Valor de glicemia basal (mg/dl).
+ */
+data class Chequeo(
+    val id: String,
+    val buzoRut: String,
+    val fecha: LocalDate,
+    val esApto: Boolean,
+
+    val pesoKg: Double,
+    val tallaM: Double,
+    val colesterolTotal: Int,
+    val hdl: Int,
+    val ldl: Int,
+    val trigliceridos: Int,
+    val hemograma: Boolean,
+    val glicemiaBasal: Int,
+    val presionArterial: String,
+    val frecuenciaCardiaca: Int
+)
+
+/**
+ * =============================================================================
  * AppData
  * =============================================================================
  * Repositorio centralizado en memoria (Singleton) que almacena el estado global
@@ -154,7 +193,7 @@ object AppData {
             matricula = "Buzo Comercial N° 2394",
             telefono = "+56 9 8451 2290",
             estadoSalud = EstadoSalud.APTO,
-            ultimoChequeo = "15/09/2026 - 08:30 hrs"
+            ultimoChequeo = LocalDate.of(2026, 9, 15)
         ),
         Buzo(
             id = "2",
@@ -164,7 +203,7 @@ object AppData {
             matricula = "Buzo Básico N° 5812",
             telefono = "+56 9 7123 9940",
             estadoSalud = EstadoSalud.PENDIENTE,
-            ultimoChequeo = "Pendiente de faena"
+            ultimoChequeo = null
         ),
         Buzo(
             id = "3",
@@ -174,9 +213,10 @@ object AppData {
             matricula = "Buzo Especialista N° 1042",
             telefono = "+56 9 9234 5512",
             estadoSalud = EstadoSalud.APTO,
-            ultimoChequeo = "15/09/2026 - 09:15 hrs"
+            ultimoChequeo = LocalDate.of(2026, 9, 15)
         )
     )
+    val chequeos = mutableStateListOf<Chequeo>()
 
     /** Catálogo oficial de empresas contratistas de servicios de buceo */
     val empresas = listOf(
