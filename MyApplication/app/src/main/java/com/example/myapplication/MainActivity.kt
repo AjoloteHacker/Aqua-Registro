@@ -17,7 +17,6 @@ import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.screens.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
-
 /**
  * Actividad principal de la aplicación.
  */
