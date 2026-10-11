@@ -225,65 +225,26 @@ object AppData {
         "Buceos del Sur S.A.",
         "Patagonia Diving Services"
     )
+import com.example.myapplication.data.model.*
+import com.example.myapplication.data.repository.AquaRepository
 
-    /** Catálogo de centros de cultivo de salmones de AquaChile */
-    val centrosCultivo = listOf(
-        "Centro Melinka 1 - Canal Moraleda",
-        "Centro Chiloé Norte - Isla Lemuy",
-        "Centro Aysén 4 - Fiordo Aisén",
-        "Centro Calbuco - Isla Huapi"
-    )
+/**
+ * Fachada para compatibilidad con código anterior.
+ */
+object AppData {
+    val repository: AquaRepository get() = AquaRepository.getInstance()
 
-    /** Tipos estandarizados de faena y maniobra submarina */
-    val tiposFaena = listOf(
-        "Inspección de redes loberas",
-        "Limpieza y retiro de bioincrustaciones en mallas",
-        "Extracción segura de mortalidad",
-        "Inspección y tensado de fondeos submarinos",
-        "Reparación de pasadores y tensores de jaulas"
-    )
+    val empresas: List<String> get() = repository.empresas
+    val centrosCultivo: List<String> get() = repository.centrosCultivo
+    val tiposFaena: List<String> get() = repository.tiposFaena
 
-    /** Bitácora digital centralizada de faenas submarinas */
-    val faenas = mutableStateListOf(
-        RegistroFaena(
-            id = "F-101",
-            buzoNombre = "Carlos Soto Paredes",
-            empresa = "Servicios Submarinos Austral SpA",
-            centroCultivo = "Centro Melinka 1 - Canal Moraleda",
-            tipoFaena = "Inspección de redes loberas",
-            profundidadMetros = 18,
-            tiempoMinutos = 40,
-            fechaHora = "15/09/2026 09:00",
-            estado = "Completada con Éxito"
-        ),
-        RegistroFaena(
-            id = "F-102",
-            buzoNombre = "Rodrigo Mansilla Cárdenas",
-            empresa = "Buceos del Sur S.A.",
-            centroCultivo = "Centro Chiloé Norte - Isla Lemuy",
-            tipoFaena = "Limpieza y retiro de bioincrustaciones en mallas",
-            profundidadMetros = 22,
-            tiempoMinutos = 35,
-            fechaHora = "15/09/2026 10:30",
-            estado = "En Faena"
-        )
-    )
+    var prevencionistaActivo: Prevencionista
+        get() = repository.prevencionistaActivo.value ?: repository.usuarios.value.first()
+        set(value) {}
 
-    /**
-     * Retorna la lista inicial de los 9 implementos obligatorios que el
-     * prevencionista debe auditar en terreno antes de permitir la inmersión.
-     */
-    fun obtenerEquiposDefault(): List<EquipoChequeo> {
-        return listOf(
-            EquipoChequeo("e1", "Traje de buceo y botines", "Estanco, espesor térmico adecuado, sin cortes ni filtraciones"),
-            EquipoChequeo("e2", "Máscara / Escafandra de buceo", "Visor transparente con sellado hermético y correa en buen estado"),
-            EquipoChequeo("e3", "Botella / Tanque de aire comprimido", "Presión manométrica verificada (mínimo 200 BAR) con prueba hidrostática al día"),
-            EquipoChequeo("e4", "Regulador principal y fuente alternativa (Octopus)", "Primera y segunda etapa calibradas, boquillas limpias"),
-            EquipoChequeo("e5", "Chaleco compensador de flotabilidad (BCD)", "Válvulas de sobrepresión e inflador directo (Power Inflator) operativos"),
-            EquipoChequeo("e6", "Manómetro sumergible / Consola", "Lectura continua de presión visible y libre de condensación"),
-            EquipoChequeo("e7", "Profundímetro y computador de inmersión", "Batería certificada, medición de profundidad y tiempos de no-descompresión"),
-            EquipoChequeo("e8", "Cuchillo de buceo / Cortalíneas", "Ubicado en zona de fácil acceso para casos de atrapamiento en mallas"),
-            EquipoChequeo("e9", "Cabo de vida / Arnés de seguridad", "Cabo guía para comunicación con superficie y prevencionista")
-        )
-    }
+    val buzos: List<Buzo> get() = repository.buzos.value
+    val faenas: List<RegistroFaena> get() = repository.faenas.value
+    val usuarios: List<Prevencionista> get() = repository.usuarios.value
+
+    fun obtenerEquiposDefault(): List<EquipoChequeo> = repository.obtenerEquiposDefault()
 }

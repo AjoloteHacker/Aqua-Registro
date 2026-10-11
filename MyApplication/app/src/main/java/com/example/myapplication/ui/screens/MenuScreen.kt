@@ -22,93 +22,39 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.myapplication.data.AppData
+import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.ui.components.AquaScaffold
+import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MenuScreen(navController: NavController) {
-    var selectedTab by remember { mutableIntStateOf(0) }
+fun MenuScreen(
+    navController: NavController,
+    onOpenDrawer: () -> Unit = {},
+    repository: AquaRepository = AquaRepository.getInstance()
+) {
+    val prevencionista by repository.prevencionistaActivo.collectAsState()
+    val buzos by repository.buzos.collectAsState()
+    val faenas by repository.faenas.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "Aqua-Registro",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Prevencionista: ${AppData.prevencionistaActivo.nombre}",
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.85f)
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        navController.navigate("login") {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Logout,
-                            contentDescription = "Cerrar Sesión",
-                            tint = Color.White
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AquaPrimary,
-                    titleContentColor = Color.White
-                )
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = Color.White,
-                tonalElevation = 8.dp
-            ) {
-                NavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.Default.Dashboard, contentDescription = "Inicio") },
-                    label = { Text("Inicio") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = AquaPrimary,
-                        selectedTextColor = AquaPrimary,
-                        indicatorColor = AquaPrimary.copy(alpha = 0.15f)
-                    )
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = {
-                        selectedTab = 1
-                        navController.navigate("buzo")
-                    },
-                    icon = { Icon(Icons.Default.People, contentDescription = "Buzos") },
-                    label = { Text("Buzos") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = {
-                        selectedTab = 2
-                        navController.navigate("trabajo")
-                    },
-                    icon = { Icon(Icons.Default.Engineering, contentDescription = "Faena") },
-                    label = { Text("Faena") }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 3,
-                    onClick = {
-                        selectedTab = 3
-                        navController.navigate("historial")
-                    },
-                    icon = { Icon(Icons.Default.History, contentDescription = "Historial") },
-                    label = { Text("Historial") }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    AquaScaffold(
+        title = "Aqua-Registro",
+        subtitle = "Prevencionista: ${prevencionista?.nombre ?: "Sin sesión"}",
+        snackbarHostState = snackbarHostState,
+        onOpenDrawer = onOpenDrawer,
+        actions = {
+            IconButton(onClick = {
+                repository.logout()
+                navController.navigate(Screen.Login.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                    contentDescription = "Cerrar Sesión",
+                    tint = Color.White
                 )
             }
         }
@@ -122,7 +68,6 @@ fun MenuScreen(navController: NavController) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Tarjeta Informativa de Faena Activa
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -156,13 +101,13 @@ fun MenuScreen(navController: NavController) {
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = AppData.prevencionistaActivo.centro,
+                            text = prevencionista?.centro ?: "Base Central",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = AquaTextPrimary
                         )
                         Text(
-                            text = "AquaChile · ${AppData.buzos.size} buzos registrados en turno",
+                            text = "AquaChile · ${buzos.size} buzos registrados en turno",
                             fontSize = 13.sp,
                             color = AquaTextSecondary
                         )
@@ -184,61 +129,56 @@ fun MenuScreen(navController: NavController) {
             }
 
             Text(
-                text = "Módulos de Seguridad y Control",
+                text = "Módulos de Seguridad y Control (MVVM)",
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 color = AquaTextPrimary,
                 modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
             )
 
-            // Módulo 1: Registro de Buzos
             MenuOptionCard(
                 titulo = "Ficha y Registro de Buzos",
-                descripcion = "Administración de buzos, RUT, matrículas de la Armada y empresas contratistas.",
+                descripcion = "Administración de buzos, RUT, matrículas DIRECTEMAR y empresas contratistas.",
                 icono = Icons.Default.PersonAdd,
                 colorTema = AquaPrimary,
-                badgeText = "${AppData.buzos.size} Buzos",
-                onClick = { navController.navigate("buzo") }
+                badgeText = "${buzos.size} Buzos",
+                onClick = { navController.navigate(Screen.Buzo.route) }
             )
 
-            // Módulo 2: Control de Equipos
             MenuOptionCard(
                 titulo = "Control de Equipos y Seguridad",
                 descripcion = "Checklist de tanques (200 BAR), regulador octopus, BCD, trajes y profundímetro.",
                 icono = Icons.Default.CheckCircle,
                 colorTema = AquaSecondary,
                 badgeText = "9 Puntos",
-                onClick = { navController.navigate("equipos") }
+                onClick = { navController.navigate(Screen.Equipos.route) }
             )
 
-            // Módulo 3: Encuesta Pre-Buceo
             MenuOptionCard(
                 titulo = "Encuesta de Salud Pre-Buceo",
-                descripcion = "Control de presión, pulsaciones y aptitud física/mental antes de la inmersión.",
+                descripcion = "Control de presión, pulso y declaración de aptitud física/mental antes de la inmersión.",
                 icono = Icons.Default.Favorite,
                 colorTema = Color(0xFFE91E63),
                 badgeText = "Médico",
-                onClick = { navController.navigate("salud") }
+                onClick = { navController.navigate(Screen.Salud.route) }
             )
 
-            // Módulo 4: Registro de Trabajo
             MenuOptionCard(
                 titulo = "Registro de Trabajo y Faena",
-                descripcion = "Asignación de buzo apto, tipo de maniobra (redes, peceras) y tiempo de inmersión.",
+                descripcion = "Planificación AST, asignación de buzo apto, tipo de maniobra y profundidad.",
                 icono = Icons.AutoMirrored.Filled.Assignment,
                 colorTema = AquaPrimary,
                 badgeText = "Autorización",
-                onClick = { navController.navigate("trabajo") }
+                onClick = { navController.navigate(Screen.Trabajo.route) }
             )
 
-            // Módulo 5: Historial
             MenuOptionCard(
                 titulo = "Historial de Inmersiones",
                 descripcion = "Bitácora digital centralizada de todas las faenas submarinas realizadas.",
                 icono = Icons.Default.HistoryEdu,
                 colorTema = AquaSecondary,
-                badgeText = "${AppData.faenas.size} Registros",
-                onClick = { navController.navigate("historial") }
+                badgeText = "${faenas.size} Registros",
+                onClick = { navController.navigate(Screen.Historial.route) }
             )
 
             Spacer(modifier = Modifier.height(16.dp))

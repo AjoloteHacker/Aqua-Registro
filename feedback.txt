@@ -1,0 +1,4 @@
+-Arreglar la barra lateral y eliminar la barra de abajo
+-Agregar mas seguridad a la hora de registrar usuario
+-Agregar Rutificador reutilizable
+
