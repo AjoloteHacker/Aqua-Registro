@@ -1,9 +1,11 @@
 package com.example.myapplication.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -12,245 +14,419 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.myapplication.data.AppData
-import com.example.myapplication.data.EquipoChequeo
+import com.example.myapplication.data.model.EstadoEquipo
+import com.example.myapplication.data.model.EtapaComprobacion
+import com.example.myapplication.data.model.RevisionEquipo
+import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.EquiposUiState
+import com.example.myapplication.ui.viewmodels.EquiposViewModel
+
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import java.io.File
+
+// ───────────────────────── Colores de estado ─────────────────────────
+
+private val AmbarRiesgo = Color(0xFFF59E0B) // reemplaza por tu token si ya existe
+
+private fun EstadoEquipo.color(): Color = when (this) {
+    EstadoEquipo.ACEPTABLE -> SafetySuccess
+    EstadoEquipo.UTILIZABLE_RIESGOSO -> AmbarRiesgo
+    EstadoEquipo.INUTILIZABLE -> SafetyDanger
+    EstadoEquipo.SIN_REVISAR -> AquaTextSecondary
+}
+
+// ───────────────────────── Pantalla Principal ─────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EquiposScreen(navController: NavController) {
-    var buzoSeleccionado by remember {
-        mutableStateOf(AppData.buzos.firstOrNull()?.nombre ?: "Sin buzo")
-    }
-    var dropdownBuzoExpanded by remember { mutableStateOf(false) }
-
-    val listaEquipos = remember {
-        mutableStateListOf<EquipoChequeo>().apply {
-            addAll(AppData.obtenerEquiposDefault())
-        }
-    }
-
-    val totalEquipos = listaEquipos.size
-    val equiposValidados = listaEquipos.count { it.verificado }
-    val esConforme = equiposValidados == totalEquipos
-
-    var snackbarMessage by remember { mutableStateOf<String?>(null) }
+fun EquiposScreen(
+    navController: NavController,
+    onOpenDrawer: () -> Unit = {},
+    viewModel: EquiposViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
-    LaunchedEffect(snackbarMessage) {
-        snackbarMessage?.let {
+    var currentEquipoFotoId by remember { mutableStateOf<String?>(null) }
+    var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            val equipoId = currentEquipoFotoId
+            val uri = tempPhotoUri
+            if (equipoId != null && uri != null) {
+                viewModel.registrarFoto(equipoId, uri.toString())
+            }
+        }
+        currentEquipoFotoId = null
+        tempPhotoUri = null
+    }
+
+    fun tomarFoto(equipoId: String) {
+        currentEquipoFotoId = equipoId
+        val photosDir = File(context.cacheDir, "photos").apply { mkdirs() }
+        val photoFile = File.createTempFile("equipo_${equipoId}_", ".jpg", photosDir)
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            photoFile
+        )
+        tempPhotoUri = uri
+        cameraLauncher.launch(uri)
+    }
+
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let {
             snackbarHostState.showSnackbar(it)
-            snackbarMessage = null
+            viewModel.clearUserMessage()
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Control de Equipos", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AquaPrimary)
+    AquaScaffold(
+        title = "Control de Equipos",
+        subtitle = "Verificación y estado",
+        snackbarHostState = snackbarHostState,
+        onOpenDrawer = onOpenDrawer,
+        actions = {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
+            }
+        }
+    ) { paddingValues ->
+        ChecklistEquiposContent(
+            uiState = uiState,
+            onSeleccionarBuzo = viewModel::seleccionarBuzo,
+            onSeleccionarEtapa = viewModel::seleccionarEtapa,
+            onEstadoChange = viewModel::actualizarEstado,
+            onDescripcionChange = viewModel::actualizarDescripcion,
+            onTomarFoto = { equipoId -> tomarFoto(equipoId) },
+            onGuardarAvance = viewModel::guardarAvance,
+            onConfirmarEtapa = viewModel::confirmarEtapa,
+            modifier = Modifier.padding(paddingValues)
+        )
+    }
+}
+
+// ───────────────────────── Contenido reutilizable ─────────────────────────
+// Sin dependencia de la faena: sirve también para post-faena o comprobaciones sueltas.
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChecklistEquiposContent(
+    uiState: EquiposUiState,
+    onSeleccionarBuzo: (String) -> Unit,
+    onSeleccionarEtapa: (EtapaComprobacion) -> Unit,
+    onEstadoChange: (equipoId: String, EstadoEquipo) -> Unit,
+    onDescripcionChange: (equipoId: String, String) -> Unit,
+    onTomarFoto: (equipoId: String) -> Unit,
+    onGuardarAvance: () -> Unit,
+    onConfirmarEtapa: () -> Unit,
+    modifier: Modifier = Modifier,
+    miniatura: @Composable (uri: String, modifier: Modifier) -> Unit = { uriString, m ->
+        val context = LocalContext.current
+        val bitmap = remember(uriString) {
+            runCatching {
+                val uri = Uri.parse(uriString)
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream)
+                }
+            }.getOrNull()
+        }
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Foto del equipo",
+                modifier = m,
+                contentScale = ContentScale.Crop
             )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        Column(
+        } else {
+            Box(m.background(AquaBackground), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Image, contentDescription = "Foto adjunta", tint = AquaPrimary)
+            }
+        }
+    }
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(AquaBackground)
+            .padding(16.dp)
+    ) {
+        // Etapa
+        TabRow(selectedTabIndex = uiState.etapa.ordinal) {
+            EtapaComprobacion.values().forEach { etapa ->
+                Tab(
+                    selected = etapa == uiState.etapa,
+                    onClick = { onSeleccionarEtapa(etapa) },
+                    text = { Text(etapa.etiqueta, fontSize = 13.sp) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // Buzos de la faena
+        Text("Buzo", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AquaTextPrimary)
+        Spacer(Modifier.height(4.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(uiState.buzos, key = { it.id }) { buzo ->
+                FilterChip(
+                    selected = buzo.id == uiState.buzoSeleccionadoId,
+                    onClick = { onSeleccionarBuzo(buzo.id) },
+                    label = { Text("🤿 ${buzo.nombre} (${buzo.equiposCompletos}/${buzo.totalEquipos})") }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        ResumenCard(uiState)
+
+        Spacer(Modifier.height(10.dp))
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(AquaBackground)
-                .padding(16.dp)
+                .weight(1f)
+                .fillMaxWidth()
         ) {
-            // Selector de Buzo
-            Text(
-                text = "Buzo Asignado para Chequeo",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = AquaTextPrimary
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = { dropdownBuzoExpanded = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "🤿 $buzoSeleccionado", color = AquaTextPrimary, fontWeight = FontWeight.Medium)
-                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Seleccionar buzo")
-                    }
-                }
-                DropdownMenu(
-                    expanded = dropdownBuzoExpanded,
-                    onDismissRequest = { dropdownBuzoExpanded = false }
-                ) {
-                    AppData.buzos.forEach { buzo ->
-                        DropdownMenuItem(
-                            text = { Text("${buzo.nombre} (${buzo.empresa})") },
-                            onClick = {
-                                buzoSeleccionado = buzo.nombre
-                                dropdownBuzoExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Banner de Estado
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (esConforme) SafetyCardBgSuccess else SafetyCardBgDanger
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (esConforme) Icons.Default.CheckCircle else Icons.Default.Warning,
-                        contentDescription = "Estado",
-                        tint = if (esConforme) SafetySuccess else SafetyDanger,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (esConforme) "EQUIPAMIENTO 100% VERIFICADO" else "REVISIÓN INCOMPLETA",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = if (esConforme) SafetySuccess else SafetyDanger
-                        )
-                        Text(
-                            text = "$equiposValidados de $totalEquipos implementos verificados en terreno",
-                            fontSize = 12.sp,
-                            color = AquaTextSecondary
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Botón de marcar todos
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Lista de Verificación Obligatoria",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = AquaTextPrimary
-                )
-                TextButton(
-                    onClick = {
-                        val marcar = !esConforme
-                        listaEquipos.forEachIndexed { i, eq ->
-                            listaEquipos[i] = eq.copy(verificado = marcar)
-                        }
-                    }
-                ) {
+            uiState.equipos.groupBy { it.categoria }.forEach { (categoria, items) ->
+                item(key = "cat_$categoria") {
                     Text(
-                        text = if (esConforme) "Desmarcar todos" else "Marcar todos",
+                        text = categoria.uppercase(),
+                        fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
-                        color = AquaPrimary
+                        color = AquaPrimary,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+                items(items, key = { it.equipoId }) { equipo ->
+                    EquipoCard(
+                        equipo = equipo,
+                        onEstadoChange = { onEstadoChange(equipo.equipoId, it) },
+                        onDescripcionChange = { onDescripcionChange(equipo.equipoId, it) },
+                        onTomarFoto = { onTomarFoto(equipo.equipoId) },
+                        miniatura = miniatura
                     )
                 }
             }
+        }
 
-            // Lista de Checkbox
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+        Spacer(Modifier.height(10.dp))
+
+        if (!uiState.todoCompleto) {
+            Text(
+                text = "Lo registrado con estado y foto queda guardado como evidencia. " +
+                        "Debes completar el resto más tarde.",
+                fontSize = 11.sp,
+                color = AquaTextSecondary
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+
+        Button(
+            onClick = if (uiState.todoCompleto) onConfirmarEtapa else onGuardarAvance,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (uiState.todoCompleto) AquaPrimary else AquaSecondary
+            )
+        ) {
+            Text(
+                text = if (uiState.todoCompleto) "CONFIRMAR ${uiState.etapa.etiqueta.uppercase()}"
+                else "GUARDAR AVANCE (${uiState.completos}/${uiState.equipos.size})",
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+// ───────────────────────── Resumen ─────────────────────────
+
+@Composable
+private fun ResumenCard(uiState: EquiposUiState) {
+    val hayCritico = uiState.inutilizables > 0
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hayCritico) SafetyCardBgDanger else Color.White
+        )
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            if (hayCritico) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, null, tint = SafetyDanger, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "${uiState.inutilizables} equipo(s) inutilizable(s)",
+                        fontWeight = FontWeight.Bold, fontSize = 13.sp, color = SafetyDanger
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                itemsIndexed(listaEquipos) { index, item ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ConteoItem("Aceptables", uiState.aceptables, SafetySuccess)
+                ConteoItem("Riesgosos", uiState.riesgosos, AmbarRiesgo)
+                ConteoItem("Inutiliz.", uiState.inutilizables, SafetyDanger)
+                ConteoItem("Sin revisar", uiState.sinRevisar, AquaTextSecondary)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "${uiState.corroborables} de ${uiState.equipos.size} con evidencia (estado + foto)" +
+                        if (uiState.sinFoto > 0) " · ${uiState.sinFoto} sin foto" else "",
+                fontSize = 12.sp,
+                color = if (uiState.sinFoto > 0) SafetyDanger else AquaTextSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun ConteoItem(etiqueta: String, valor: Int, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("$valor", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = color)
+        Text(etiqueta, fontSize = 10.sp, color = AquaTextSecondary)
+    }
+}
+
+// ───────────────────────── Tarjeta de equipo ─────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EquipoCard(
+    equipo: RevisionEquipo,
+    onEstadoChange: (EstadoEquipo) -> Unit,
+    onDescripcionChange: (String) -> Unit,
+    onTomarFoto: () -> Unit,
+    miniatura: @Composable (String, Modifier) -> Unit
+) {
+    val opciones = listOf(
+        EstadoEquipo.ACEPTABLE,
+        EstadoEquipo.UTILIZABLE_RIESGOSO,
+        EstadoEquipo.INUTILIZABLE
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = if (equipo.faltaFoto || equipo.faltaDescripcion)
+            BorderStroke(1.dp, SafetyDanger) else null,
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(equipo.nombre, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = AquaTextPrimary)
+                    Text(
+                        "ID ${equipo.equipoId} · ${equipo.descripcionUso}",
+                        fontSize = 11.sp, color = AquaTextSecondary, lineHeight = 14.sp
+                    )
+                }
+                EstadoBadge(equipo)
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                opciones.forEachIndexed { index, estado ->
+                    SegmentedButton(
+                        selected = equipo.estado == estado,
+                        onClick = { onEstadoChange(estado) },
+                        shape = SegmentedButtonDefaults.itemShape(index, opciones.size),
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = estado.color().copy(alpha = 0.18f),
+                            activeContentColor = estado.color()
+                        )
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = item.verificado,
-                                onCheckedChange = { isChecked ->
-                                    listaEquipos[index] = item.copy(verificado = isChecked)
-                                },
-                                colors = CheckboxDefaults.colors(checkedColor = AquaSecondary)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = item.nombre,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 13.sp,
-                                    color = AquaTextPrimary
-                                )
-                                Text(
-                                    text = item.descripcion,
-                                    fontSize = 11.sp,
-                                    color = AquaTextSecondary,
-                                    lineHeight = 14.sp
-                                )
-                            }
-                        }
+                        Text(estado.etiqueta, fontSize = 11.sp)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
-            Button(
-                onClick = {
-                    if (esConforme) {
-                        snackbarMessage = "Equipos de $buzoSeleccionado aprobados exitosamente"
-                    } else {
-                        snackbarMessage = "Atención: Debe completar la verificación de todos los equipos antes de la inmersión"
-                    }
+            OutlinedTextField(
+                value = equipo.descripcionEstado,
+                onValueChange = onDescripcionChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = {
+                    Text(
+                        if (equipo.estado == EstadoEquipo.ACEPTABLE || !equipo.tieneEstado)
+                            "Descripción del estado (opcional)"
+                        else "Descripción del estado (obligatoria)",
+                        fontSize = 12.sp
+                    )
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (esConforme) AquaPrimary else AquaSecondary
-                )
-            ) {
-                Text(
-                    text = if (esConforme) "GUARDAR CONFORMIDAD DE EQUIPOS" else "GUARDAR ESTADO PARCIAL",
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                isError = equipo.faltaDescripcion,
+                minLines = 1,
+                maxLines = 3,
+                textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                equipo.fotoUri?.let { uri ->
+                    miniatura(uri, Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
+                    Spacer(Modifier.width(10.dp))
+                }
+                OutlinedButton(
+                    onClick = onTomarFoto,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, if (equipo.faltaFoto) SafetyDanger else AquaPrimary)
+                ) {
+                    Icon(Icons.Default.PhotoCamera, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (equipo.fotoUri == null) "Tomar foto (obligatoria)" else "Repetir foto", fontSize = 12.sp)
+                }
             }
         }
     }
+}
+
+@Composable
+private fun EstadoBadge(equipo: RevisionEquipo) {
+    val (texto, color) = when {
+        equipo.estaCompleto -> "Completo" to SafetySuccess
+        equipo.faltaFoto -> "Falta foto" to SafetyDanger
+        equipo.faltaDescripcion -> "Falta descripción" to AmbarRiesgo
+        else -> "Pendiente" to AquaTextSecondary
+    }
+    Text(
+        text = texto,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        color = color,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    )
 }

@@ -18,58 +18,51 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.myapplication.data.AppData
-import com.example.myapplication.data.Buzo
-import com.example.myapplication.data.EstadoSalud
+import com.example.myapplication.data.model.Buzo
+import com.example.myapplication.data.model.EstadoSalud
+import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.BuzoViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BuzoScreen(navController: NavController) {
-    var showDialog by remember { mutableStateOf(false) }
-    var snackbarHostState = remember { SnackbarHostState() }
-    var searchQuery by remember { mutableStateOf("") }
-
-    // Dialog state
-    var nuevoNombre by remember { mutableStateOf("") }
-    var nuevoRut by remember { mutableStateOf("") }
-    var nuevaMatricula by remember { mutableStateOf("") }
-    var nuevoTelefono by remember { mutableStateOf("") }
-    var empresaSeleccionada by remember { mutableStateOf(AppData.empresas.first()) }
+fun BuzoScreen(
+    navController: NavController,
+    onOpenDrawer: () -> Unit = {},
+    viewModel: BuzoViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     var dropdownExpanded by remember { mutableStateOf(false) }
 
-    val buzosFiltrados = remember(searchQuery, AppData.buzos.size) {
-        if (searchQuery.isBlank()) AppData.buzos
-        else AppData.buzos.filter {
-            it.nombre.contains(searchQuery, ignoreCase = true) ||
-            it.rut.contains(searchQuery, ignoreCase = true) ||
-            it.empresa.contains(searchQuery, ignoreCase = true)
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearUserMessage()
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Registro de Buzos", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AquaPrimary)
-            )
+    AquaScaffold(
+        title = "Registro de Buzos",
+        subtitle = "${uiState.buzos.size} buzos enrolados",
+        snackbarHostState = snackbarHostState,
+        onOpenDrawer = onOpenDrawer,
+        actions = {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
+            }
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showDialog = true },
+                onClick = { viewModel.openAddDialog() },
                 containerColor = AquaSecondary,
                 contentColor = Color.White
             ) {
                 Icon(Icons.Default.PersonAdd, contentDescription = "Agregar Buzo")
             }
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -78,10 +71,9 @@ fun BuzoScreen(navController: NavController) {
                 .background(AquaBackground)
                 .padding(16.dp)
         ) {
-            // Buscador
             OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+                value = uiState.searchQuery,
+                onValueChange = { viewModel.onSearchQueryChange(it) },
                 label = { Text("Buscar buzo por nombre, RUT o empresa") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar", tint = AquaPrimary) },
                 modifier = Modifier.fillMaxWidth(),
@@ -95,7 +87,7 @@ fun BuzoScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "Buzos Registrados (${buzosFiltrados.size})",
+                text = "Buzos Registrados (${uiState.buzosFiltrados.size})",
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
                 color = AquaTextPrimary
@@ -103,20 +95,32 @@ fun BuzoScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(buzosFiltrados) { buzo ->
-                    BuzoCard(buzo = buzo)
+            if (uiState.buzosFiltrados.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.PersonSearch, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("No se encontraron buzos con el criterio ingresado", color = AquaTextSecondary)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(uiState.buzosFiltrados, key = { it.id }) { buzo ->
+                        BuzoCard(buzo = buzo)
+                    }
                 }
             }
         }
 
-        // Modal para agregar Buzo
-        if (showDialog) {
+        if (uiState.showAddDialog) {
             AlertDialog(
-                onDismissRequest = { showDialog = false },
+                onDismissRequest = { viewModel.closeAddDialog() },
                 title = { Text("Registrar Nuevo Buzo", fontWeight = FontWeight.Bold, color = AquaPrimary) },
                 text = {
                     Column(
@@ -124,35 +128,35 @@ fun BuzoScreen(navController: NavController) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         OutlinedTextField(
-                            value = nuevoNombre,
-                            onValueChange = { nuevoNombre = it },
-                            label = { Text("Nombre y Apellidos") },
+                            value = uiState.nuevoNombre,
+                            onValueChange = { viewModel.onNuevoNombreChange(it) },
+                            label = { Text("Nombre y Apellidos *") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
-                            value = nuevoRut,
-                            onValueChange = { nuevoRut = it },
-                            label = { Text("RUT (ej: 18.234.567-8)") },
+                            value = uiState.nuevoRut,
+                            onValueChange = { viewModel.onNuevoRutChange(it) },
+                            label = { Text("RUT (ej: 18.234.567-8) *") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
-                            value = nuevaMatricula,
-                            onValueChange = { nuevaMatricula = it },
+                            value = uiState.nuevaMatricula,
+                            onValueChange = { viewModel.onNuevaMatriculaChange(it) },
                             label = { Text("Matrícula Marítima") },
+                            placeholder = { Text("DIRECTEMAR N° 1000") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
                         OutlinedTextField(
-                            value = nuevoTelefono,
-                            onValueChange = { nuevoTelefono = it },
+                            value = uiState.nuevoTelefono,
+                            onValueChange = { viewModel.onNuevoTelefonoChange(it) },
                             label = { Text("Teléfono de Contacto") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        // Selector de Empresa Contratista
                         Box(modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(
                                 onClick = { dropdownExpanded = true },
@@ -164,7 +168,7 @@ fun BuzoScreen(navController: NavController) {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("Empresa: $empresaSeleccionada", fontSize = 13.sp, color = AquaTextPrimary)
+                                    Text("Empresa: ${uiState.empresaSeleccionada}", fontSize = 13.sp, color = AquaTextPrimary)
                                     Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
                                 }
                             }
@@ -172,48 +176,38 @@ fun BuzoScreen(navController: NavController) {
                                 expanded = dropdownExpanded,
                                 onDismissRequest = { dropdownExpanded = false }
                             ) {
-                                AppData.empresas.forEach { emp ->
+                                uiState.empresasDisponibles.forEach { emp ->
                                     DropdownMenuItem(
                                         text = { Text(emp) },
                                         onClick = {
-                                            empresaSeleccionada = emp
+                                            viewModel.onEmpresaSeleccionadaChange(emp)
                                             dropdownExpanded = false
                                         }
                                     )
                                 }
                             }
                         }
+
+                        if (uiState.error != null) {
+                            Text(
+                                text = uiState.error ?: "",
+                                color = SafetyDanger,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 },
                 confirmButton = {
                     Button(
-                        onClick = {
-                            if (nuevoNombre.isNotBlank() && nuevoRut.isNotBlank()) {
-                                AppData.buzos.add(
-                                    Buzo(
-                                        id = (AppData.buzos.size + 1).toString(),
-                                        rut = nuevoRut,
-                                        nombre = nuevoNombre,
-                                        empresa = empresaSeleccionada,
-                                        matricula = if (nuevaMatricula.isBlank()) "Buzo Comercial N° ${1000 + AppData.buzos.size}" else nuevaMatricula,
-                                        telefono = if (nuevoTelefono.isBlank()) "+56 9 9000 0000" else nuevoTelefono,
-                                        estadoSalud = EstadoSalud.PENDIENTE
-                                    )
-                                )
-                                nuevoNombre = ""
-                                nuevoRut = ""
-                                nuevaMatricula = ""
-                                nuevoTelefono = ""
-                                showDialog = false
-                            }
-                        },
+                        onClick = { viewModel.agregarBuzo() },
                         colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
                     ) {
                         Text("Guardar Buzo")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDialog = false }) {
+                    TextButton(onClick = { viewModel.closeAddDialog() }) {
                         Text("Cancelar")
                     }
                 }
@@ -270,7 +264,6 @@ fun BuzoCard(buzo: Buzo) {
                     )
                 }
 
-                // Badge de Estado de Salud
                 val (badgeColor, badgeBg) = when (buzo.estadoSalud) {
                     EstadoSalud.APTO -> Pair(SafetySuccess, SafetyCardBgSuccess)
                     EstadoSalud.NO_APTO -> Pair(SafetyDanger, SafetyCardBgDanger)

@@ -4,26 +4,21 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.ui.components.AquaDrawerContent
+import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.screens.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
-
+import kotlinx.coroutines.launch
 /**
- * =============================================================================
- * MainActivity
- * =============================================================================
- * Actividad principal y punto de entrada de la aplicación Aqua-Registro.
- *
- * Responsabilidades:
- * - Inicializar el entorno de Compose mediante [setContent].
- * - Aplicar el tema global de la aplicación ([MyApplicationTheme]).
- * - Alojar el contenedor principal [Surface] y lanzar la navegación con [AquaRegistroApp].
+ * Actividad principal de la aplicación.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,35 +37,98 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * =============================================================================
- * AquaRegistroApp
- * =============================================================================
- * Composable raíz que gestiona el grafo de navegación de la aplicación mediante
- * [NavHost] y [rememberNavController].
- *
- * Rutas configuradas en el flujo del sistema:
- * - "login"     : Pantalla de autenticación y alta de prevencionista ([LoginScreen]).
- * - "menu"      : Menú principal / Dashboard operativo en terreno ([MenuScreen]).
- * - "buzo"      : Ficha técnica, búsqueda y alta de buzos ([BuzoScreen]).
- * - "equipos"   : Checklist técnico de 9 implementos de seguridad ([EquiposScreen]).
- * - "salud"     : Encuesta biomédica pre-inmersión y dictamen de aptitud ([SaludScreen]).
- * - "trabajo"   : Planificación AST, asignación de buzo y autorización ([TrabajoScreen]).
- * - "historial" : Bitácora digitalizada centralizada de faenas ([HistorialScreen]).
+ * Composable raíz con la navegación y menú lateral.
  */
 @Composable
-fun AquaRegistroApp() {
+fun AquaRegistroApp(
+    repository: AquaRepository = AquaRepository.getInstance()
+) {
     val navController = rememberNavController()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
 
-    NavHost(
-        navController = navController,
-        startDestination = "login"
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Login.route
+
+    val usuarioActivo by repository.prevencionistaActivo.collectAsState()
+    val isDrawerEnabled = currentRoute != Screen.Login.route
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = isDrawerEnabled,
+        drawerContent = {
+            if (isDrawerEnabled) {
+                AquaDrawerContent(
+                    currentRoute = currentRoute,
+                    usuario = usuarioActivo,
+                    onNavigate = { screen ->
+                        coroutineScope.launch { drawerState.close() }
+                        if (currentRoute != screen.route) {
+                            if (screen.route == Screen.Menu.route) {
+                                navController.popBackStack(Screen.Menu.route, inclusive = false)
+                            } else {
+                                navController.navigate(screen.route) {
+                                    popUpTo(Screen.Menu.route) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
+                    },
+                    onLogout = {
+                        coroutineScope.launch { drawerState.close() }
+                        repository.logout()
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
+            }
+        }
     ) {
-        composable("login") { LoginScreen(navController) }
-        composable("menu") { MenuScreen(navController) }
-        composable("buzo") { BuzoScreen(navController) }
-        composable("equipos") { EquiposScreen(navController) }
-        composable("salud") { SaludScreen(navController) }
-        composable("trabajo") { TrabajoScreen(navController) }
-        composable("historial") { HistorialScreen(navController) }
+        NavHost(
+            navController = navController,
+            startDestination = Screen.Login.route
+        ) {
+            composable(Screen.Login.route) {
+                LoginScreen(navController = navController)
+            }
+            composable(Screen.Menu.route) {
+                MenuScreen(
+                    navController = navController,
+                    onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                )
+            }
+            composable(Screen.Buzo.route) {
+                BuzoScreen(
+                    navController = navController,
+                    onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                )
+            }
+            composable(Screen.Equipos.route) {
+                EquiposScreen(
+                    navController = navController,
+                    onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                )
+            }
+            composable(Screen.Salud.route) {
+                SaludScreen(
+                    navController = navController,
+                    onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                )
+            }
+            composable(Screen.Trabajo.route) {
+                TrabajoScreen(
+                    navController = navController,
+                    onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                )
+            }
+            composable(Screen.Historial.route) {
+                HistorialScreen(
+                    navController = navController,
+                    onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                )
+            }
+        }
     }
 }

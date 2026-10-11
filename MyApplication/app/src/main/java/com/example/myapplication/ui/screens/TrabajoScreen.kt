@@ -18,45 +18,43 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.myapplication.data.AppData
-import com.example.myapplication.data.EstadoSalud
-import com.example.myapplication.data.RegistroFaena
+import com.example.myapplication.ui.components.AquaScaffold
+import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.TrabajoViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TrabajoScreen(navController: NavController) {
-    var buzoIndex by remember { mutableIntStateOf(0) }
+fun TrabajoScreen(
+    navController: NavController,
+    onOpenDrawer: () -> Unit = {},
+    viewModel: TrabajoViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
     var buzoDropdownOpen by remember { mutableStateOf(false) }
-
-    var centroCultivo by remember { mutableStateOf(AppData.centrosCultivo.first()) }
     var centroDropdownOpen by remember { mutableStateOf(false) }
-
-    var tipoFaena by remember { mutableStateOf(AppData.tiposFaena.first()) }
     var faenaDropdownOpen by remember { mutableStateOf(false) }
 
-    var profundidad by remember { mutableStateOf("18") }
-    var duracionMinutos by remember { mutableStateOf("40") }
-    var supervisor by remember { mutableStateOf("Cristóbal Loncón (Prevencionista)") }
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearUserMessage()
+        }
+    }
 
-    val buzoSeleccionado = AppData.buzos.getOrNull(buzoIndex)
-    val esBuzoApto = buzoSeleccionado?.estadoSalud == EstadoSalud.APTO
-
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var successDialog by remember { mutableStateOf(false) }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Registro de Faena Submarina", color = Color.White, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = AquaPrimary)
-            )
+    AquaScaffold(
+        title = "Registro de Faena Submarina",
+        subtitle = "Planificación AST y Autorización",
+        snackbarHostState = snackbarHostState,
+        onOpenDrawer = onOpenDrawer,
+        actions = {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
+            }
         }
     ) { padding ->
         Column(
@@ -68,7 +66,6 @@ fun TrabajoScreen(navController: NavController) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Tarjeta de Selección de Buzo
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -99,7 +96,7 @@ fun TrabajoScreen(navController: NavController) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = buzoSeleccionado?.let { "${it.nombre} (${it.empresa})" } ?: "Seleccionar",
+                                    text = uiState.buzoSeleccionado?.let { "${it.nombre} (${it.empresa})" } ?: "Seleccionar buzo",
                                     color = AquaTextPrimary,
                                     fontSize = 13.sp
                                 )
@@ -110,11 +107,11 @@ fun TrabajoScreen(navController: NavController) {
                             expanded = buzoDropdownOpen,
                             onDismissRequest = { buzoDropdownOpen = false }
                         ) {
-                            AppData.buzos.forEachIndexed { idx, buzo ->
+                            uiState.buzos.forEach { buzo ->
                                 DropdownMenuItem(
                                     text = { Text("${buzo.nombre} - [${buzo.estadoSalud.label}]") },
                                     onClick = {
-                                        buzoIndex = idx
+                                        viewModel.seleccionarBuzo(buzo.id)
                                         buzoDropdownOpen = false
                                     }
                                 )
@@ -122,8 +119,7 @@ fun TrabajoScreen(navController: NavController) {
                         }
                     }
 
-                    // Alerta de Estado del Buzo
-                    if (esBuzoApto) {
+                    if (uiState.esBuzoApto) {
                         Surface(
                             color = SafetyCardBgSuccess,
                             shape = RoundedCornerShape(8.dp),
@@ -156,7 +152,7 @@ fun TrabajoScreen(navController: NavController) {
                                 Icon(Icons.Default.Warning, contentDescription = "Alerta", tint = SafetyDanger, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Atención: Debe validar el examen de salud antes de autorizar",
+                                    text = "Atención: El buzo no está apto. Debe validar la encuesta de salud antes de autorizar.",
                                     fontSize = 12.sp,
                                     color = SafetyDanger,
                                     fontWeight = FontWeight.SemiBold
@@ -167,7 +163,6 @@ fun TrabajoScreen(navController: NavController) {
                 }
             }
 
-            // Tarjeta de Parámetros de la Faena
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -186,7 +181,6 @@ fun TrabajoScreen(navController: NavController) {
                         color = AquaPrimary
                     )
 
-                    // Centro de Cultivo
                     Text("Centro de Operación / Cultivo:", fontSize = 12.sp, color = AquaTextSecondary)
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(
@@ -199,7 +193,7 @@ fun TrabajoScreen(navController: NavController) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(centroCultivo, fontSize = 13.sp, color = AquaTextPrimary)
+                                Text(uiState.centroCultivo, fontSize = 13.sp, color = AquaTextPrimary)
                                 Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
                             }
                         }
@@ -207,11 +201,11 @@ fun TrabajoScreen(navController: NavController) {
                             expanded = centroDropdownOpen,
                             onDismissRequest = { centroDropdownOpen = false }
                         ) {
-                            AppData.centrosCultivo.forEach { c ->
+                            uiState.centrosDisponibles.forEach { c ->
                                 DropdownMenuItem(
                                     text = { Text(c) },
                                     onClick = {
-                                        centroCultivo = c
+                                        viewModel.onCentroChange(c)
                                         centroDropdownOpen = false
                                     }
                                 )
@@ -219,7 +213,6 @@ fun TrabajoScreen(navController: NavController) {
                         }
                     }
 
-                    // Tipo de Faena
                     Text("Tipo de Faena Submarina:", fontSize = 12.sp, color = AquaTextSecondary)
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(
@@ -232,7 +225,7 @@ fun TrabajoScreen(navController: NavController) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(tipoFaena, fontSize = 13.sp, color = AquaTextPrimary)
+                                Text(uiState.tipoFaena, fontSize = 13.sp, color = AquaTextPrimary)
                                 Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
                             }
                         }
@@ -240,11 +233,11 @@ fun TrabajoScreen(navController: NavController) {
                             expanded = faenaDropdownOpen,
                             onDismissRequest = { faenaDropdownOpen = false }
                         ) {
-                            AppData.tiposFaena.forEach { tf ->
+                            uiState.tiposFaenaDisponibles.forEach { tf ->
                                 DropdownMenuItem(
                                     text = { Text(tf) },
                                     onClick = {
-                                        tipoFaena = tf
+                                        viewModel.onTipoFaenaChange(tf)
                                         faenaDropdownOpen = false
                                     }
                                 )
@@ -252,22 +245,21 @@ fun TrabajoScreen(navController: NavController) {
                         }
                     }
 
-                    // Profundidad y Tiempo
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         OutlinedTextField(
-                            value = profundidad,
-                            onValueChange = { profundidad = it },
+                            value = uiState.profundidad,
+                            onValueChange = { viewModel.onProfundidadChange(it) },
                             label = { Text("Profundidad (m)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
                         OutlinedTextField(
-                            value = duracionMinutos,
-                            onValueChange = { duracionMinutos = it },
+                            value = uiState.duracionMinutos,
+                            onValueChange = { viewModel.onDuracionChange(it) },
                             label = { Text("Tiempo máx (min)") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f),
@@ -276,8 +268,8 @@ fun TrabajoScreen(navController: NavController) {
                     }
 
                     OutlinedTextField(
-                        value = supervisor,
-                        onValueChange = { supervisor = it },
+                        value = uiState.supervisor,
+                        onValueChange = { viewModel.onSupervisorChange(it) },
                         label = { Text("Supervisor / Prevencionista a cargo") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
@@ -285,48 +277,38 @@ fun TrabajoScreen(navController: NavController) {
                 }
             }
 
-            if (errorMessage != null) {
-                Text(
-                    text = errorMessage ?: "",
-                    color = MaterialTheme.colorScheme.error,
-                    fontSize = 13.sp
-                )
+            if (uiState.errorMessage != null) {
+                Surface(
+                    color = SafetyCardBgDanger,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = uiState.errorMessage ?: "",
+                        color = SafetyDanger,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
             }
 
-            // Botón de Autorización
             Button(
-                onClick = {
-                    if (buzoSeleccionado == null) {
-                        errorMessage = "Seleccione un buzo válido"
-                        return@Button
-                    }
-                    val prof = profundidad.toIntOrNull() ?: 15
-                    val mins = duracionMinutos.toIntOrNull() ?: 30
-
-                    val nuevoRegistro = RegistroFaena(
-                        id = "F-${100 + AppData.faenas.size + 1}",
-                        buzoNombre = buzoSeleccionado.nombre,
-                        empresa = buzoSeleccionado.empresa,
-                        centroCultivo = centroCultivo,
-                        tipoFaena = tipoFaena,
-                        profundidadMetros = prof,
-                        tiempoMinutos = mins,
-                        fechaHora = "15/09/2026 11:15",
-                        estado = "Autorizada y en Curso"
-                    )
-                    AppData.faenas.add(0, nuevoRegistro)
-                    successDialog = true
-                },
+                onClick = { viewModel.autorizarFaena() },
+                enabled = uiState.esBuzoApto,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AquaPrimary,
+                    disabledContainerColor = Color.LightGray
+                )
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = "Iniciar", tint = Color.White)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "AUTORIZAR E INICIAR FAENA",
+                    text = if (uiState.esBuzoApto) "AUTORIZAR E INICIAR FAENA" else "BUZO NO APTO (BLOQUEADO)",
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = Color.White
@@ -336,18 +318,18 @@ fun TrabajoScreen(navController: NavController) {
             Spacer(modifier = Modifier.height(10.dp))
         }
 
-        if (successDialog) {
+        if (uiState.successDialog) {
             AlertDialog(
-                onDismissRequest = { successDialog = false },
+                onDismissRequest = { viewModel.dismissSuccessDialog() },
                 title = { Text("¡Faena Autorizada!", fontWeight = FontWeight.Bold, color = SafetySuccess) },
                 text = {
-                    Text("La inmersión para ${buzoSeleccionado?.nombre} ha sido registrada y documentada en la bitácora central.")
+                    Text("La inmersión para ${uiState.buzoSeleccionado?.nombre} ha sido registrada y documentada en la bitácora central.")
                 },
                 confirmButton = {
                     Button(
                         onClick = {
-                            successDialog = false
-                            navController.navigate("historial")
+                            viewModel.dismissSuccessDialog()
+                            navController.navigate(Screen.Historial.route)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
                     ) {
