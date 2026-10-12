@@ -18,12 +18,16 @@ import com.example.myapplication.data.model.RevisionEquipo
 class AquaRepository private constructor() {
 
     // Catálogos
-    val empresas: List<String> = listOf(
-        "Servicios Submarinos Austral SpA",
-        "AquaSub Chile Limitada",
-        "Buceos del Sur S.A.",
-        "Patagonia Diving Services"
+    private val _empresas = MutableStateFlow<List<String>>(
+        listOf(
+            "Servicios Submarinos Austral SpA",
+            "AquaSub Chile Limitada",
+            "Buceos del Sur S.A.",
+            "Patagonia Diving Services"
+        )
     )
+    val empresas: List<String> get() = _empresas.value
+    val empresasFlow: StateFlow<List<String>> = _empresas.asStateFlow()
 
     val centrosCultivo: List<String> = listOf(
         "Centro Melinka 1 - Canal Moraleda",
@@ -205,6 +209,58 @@ class AquaRepository private constructor() {
         } else {
             Result.failure(NoSuchElementException("Buzo no encontrado"))
         }
+    }
+
+    fun editarBuzo(buzo: Buzo): Result<Buzo> {
+        val index = _buzos.value.indexOfFirst { it.id == buzo.id }
+        if (index == -1) {
+            return Result.failure(NoSuchElementException("Buzo no encontrado"))
+        }
+        val rutLimpio = Rutificador.limpiar(buzo.rut)
+        val rutEnUsoPorOtro = _buzos.value.any { it.id != buzo.id && Rutificador.limpiar(it.rut) == rutLimpio }
+        if (rutEnUsoPorOtro) {
+            return Result.failure(IllegalArgumentException("Ya existe otro buzo registrado con el RUT ${buzo.rut}"))
+        }
+        val buzoFormateado = buzo.copy(
+            rut = Rutificador.formatear(buzo.rut),
+            nombre = buzo.nombre.trim(),
+            matricula = buzo.matricula.trim(),
+            telefono = buzo.telefono.trim(),
+            empresa = buzo.empresa.trim()
+        )
+        _buzos.update { lista ->
+            lista.map { if (it.id == buzo.id) buzoFormateado else it }
+        }
+        return Result.success(buzoFormateado)
+    }
+
+    fun eliminarBuzo(buzoId: String): Result<Unit> {
+        val buzo = _buzos.value.firstOrNull { it.id == buzoId }
+            ?: return Result.failure(NoSuchElementException("Buzo no encontrado"))
+
+        val tieneFaenaEnCurso = _faenas.value.any {
+            it.buzoNombre.equals(buzo.nombre, ignoreCase = true) &&
+            it.estado.contains("Curso", ignoreCase = true)
+        }
+        if (tieneFaenaEnCurso) {
+            return Result.failure(IllegalStateException("No es posible eliminar a ${buzo.nombre} porque tiene una faena en curso."))
+        }
+
+        _buzos.update { lista -> lista.filterNot { it.id == buzoId } }
+        _equiposPorBuzo.update { map -> map - buzoId }
+        return Result.success(Unit)
+    }
+
+    fun agregarEmpresa(nuevaEmpresa: String): Result<String> {
+        val limpia = nuevaEmpresa.trim()
+        if (limpia.isBlank()) {
+            return Result.failure(IllegalArgumentException("El nombre de la empresa no puede estar en blanco."))
+        }
+        if (_empresas.value.any { it.equals(limpia, ignoreCase = true) }) {
+            return Result.success(limpia)
+        }
+        _empresas.update { it + limpia }
+        return Result.success(limpia)
     }
 
     // Equipos
