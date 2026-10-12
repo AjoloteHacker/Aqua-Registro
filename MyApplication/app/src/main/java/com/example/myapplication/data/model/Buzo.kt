@@ -11,5 +11,7 @@ data class Buzo(
     val matricula: String,
     val telefono: String,
     val estadoSalud: EstadoSalud = EstadoSalud.PENDIENTE,
-    val ultimoChequeo: String = "No realizado hoy"
+    val ultimoChequeo: String = "No realizado hoy",
+    val categoria: String = "Buzo Comercial",
+    val vigenciaMatricula: String = "Al día"
 )

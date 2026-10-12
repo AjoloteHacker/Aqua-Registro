@@ -36,19 +36,19 @@ graph TD
 
 ### Componentes de la Arquitectura:
 1. **Modelos de Datos (`data.model`):**
-   * [`EstadoSalud`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/data/model/EstadoSalud.kt): Enum con estados de aptitud médica (`APTO`, `NO_APTO`, `PENDIENTE`).
-   * [`Buzo`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/data/model/Buzo.kt): Entidad inmutable con matrícula DIRECTEMAR, RUT, empresa contratista y estado de salud.
-   * [`Prevencionista`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/data/model/Prevencionista.kt): Perfil profesional, acreditación SEREMI y base asignada.
-   * [`EquipoChequeo`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/data/model/EquipoChequeo.kt): Checklist de los 9 implementos técnicos obligatorios de buceo.
-   * [`RegistroFaena`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/data/model/RegistroFaena.kt): Acta digital de inmersión y faena AST.
+   * [`EstadoSalud`](file:///C:/Users/Usuario/OneDrive/Desktop/MyApplication/app/src/main/java/com/example/myapplication/data/model/EstadoSalud.kt): Enum con estados de aptitud médica (`APTO`, `NO_APTO`, `PENDIENTE`).
+   * [`Buzo`](file:///C:/Users/Usuario/OneDrive/Desktop/MyApplication/app/src/main/java/com/example/myapplication/data/model/Buzo.kt): Entidad inmutable con matrícula DIRECTEMAR, RUT, empresa contratista, categoría marítima, vigencia y estado de salud.
+   * [`Prevencionista`](file:///C:/Users/Usuario/OneDrive/Desktop/MyApplication/app/src/main/java/com/example/myapplication/data/model/Prevencionista.kt): Perfil profesional, acreditación SEREMI y base asignada.
+   * [`EquipoChequeo`](file:///C:/Users/Usuario/OneDrive/Desktop/MyApplication/app/src/main/java/com/example/myapplication/data/model/EquipoChequeo.kt): Checklist de los 9 implementos técnicos obligatorios de buceo.
+   * [`RegistroFaena`](file:///C:/Users/Usuario/OneDrive/Desktop/MyApplication/app/src/main/java/com/example/myapplication/data/model/RegistroFaena.kt): Acta digital de inmersión y faena AST.
 
 2. **Repositorio Central (`data.repository`):**
-   * [`AquaRepository`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/data/repository/AquaRepository.kt): Administra los flujos reactivos `StateFlow` para usuarios, buzos, faenas y checklists por buzo.
+   * [`AquaRepository`](file:///C:/Users/Usuario/OneDrive/Desktop/MyApplication/app/src/main/java/com/example/myapplication/data/repository/AquaRepository.kt): Administra los flujos reactivos `StateFlow` para usuarios, buzos (CRUD completo), faenas y checklists por buzo.
 
 3. **ViewModels y StateFlow (`ui.viewmodels`):**
    * Flujo unidireccional de datos con estados `StateFlow<UiState>` y funciones de intención (`Intent`).
-   * [`AuthViewModel`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/AuthViewModel.kt): Autenticación y alta de prevencionistas.
-   * [`BuzoViewModel`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/BuzoViewModel.kt): Enrolamiento, búsqueda y catálogo de buzos.
+   * [`AuthViewModel`](file:///C:/Users/Usuario/OneDrive/Desktop/MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/AuthViewModel.kt): Autenticación y alta de prevencionistas.
+   * [`BuzoViewModel`](file:///C:/Users/Usuario/OneDrive/Desktop/MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/BuzoViewModel.kt): Enrolamiento, edición, eliminación, filtros por estado de salud y ficha detallada de buzos.
    * [`EquiposViewModel`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/EquiposViewModel.kt): Checklist interactivo y persistencia por buzo.
    * [`SaludViewModel`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/SaludViewModel.kt): Declaración de salud y dictamen biomédico.
    * [`TrabajoViewModel`](file:///C:/Users/joaks/OneDrive/Documentos/codigo/Aqua-Registro/MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/TrabajoViewModel.kt): Planificación AST con validación estricta de aptitud médica.

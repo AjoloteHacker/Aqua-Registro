@@ -105,4 +105,19 @@ object SecurityUtils {
         }
         return Pair(true, null)
     }
+
+    /**
+     * Valida formato básico de teléfono de contacto móvil chileno o internacional.
+     */
+    fun validarTelefono(telefono: String): Pair<Boolean, String?> {
+        val trimmed = telefono.trim()
+        if (trimmed.isBlank()) {
+            return Pair(true, null) // Opcional
+        }
+        val digitos = trimmed.filter { it.isDigit() }
+        if (digitos.length < 8 || digitos.length > 12) {
+            return Pair(false, "El teléfono de contacto debe tener entre 8 y 12 dígitos numéricos.")
+        }
+        return Pair(true, null)
+    }
 }

@@ -198,4 +198,81 @@ class ExampleUnitTest {
         val faenaCompletada = repository.faenas.value.first { it.id == faenaId }
         assertEquals("Completada con Éxito", faenaCompletada.estado)
     }
+
+    @Test
+    fun testEditarBuzo_exitoso() {
+        val buzoOriginal = repository.buzos.value.first { it.id == "1" }
+        val buzoModificado = buzoOriginal.copy(
+            nombre = "Carlos Soto Paredes Editado",
+            telefono = "+56 9 9999 8888",
+            categoria = "Supervisor de Buceo"
+        )
+
+        val result = repository.editarBuzo(buzoModificado)
+        assertTrue(result.isSuccess)
+
+        val buzoEnRepo = repository.buzos.value.first { it.id == "1" }
+        assertEquals("Carlos Soto Paredes Editado", buzoEnRepo.nombre)
+        assertEquals("+56 9 9999 8888", buzoEnRepo.telefono)
+        assertEquals("Supervisor de Buceo", buzoEnRepo.categoria)
+    }
+
+    @Test
+    fun testEditarBuzo_rutDuplicadoFalla() {
+        val buzo2 = repository.buzos.value.first { it.id == "2" }
+        val buzo1 = repository.buzos.value.first { it.id == "1" }
+        // Intentar ponerle a buzo 2 el RUT de buzo 1
+        val buzoConRutConflicto = buzo2.copy(rut = buzo1.rut)
+
+        val result = repository.editarBuzo(buzoConRutConflicto)
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun testEliminarBuzo_exitoso() {
+        val buzoTemporal = Buzo(
+            id = "temp-eliminar-${System.currentTimeMillis()}",
+            rut = "20.123.456-7",
+            nombre = "Buzo Temporal",
+            empresa = "AquaSub Chile Limitada",
+            matricula = "Buzo Básico N° 7777",
+            telefono = "+56 9 3333 4444"
+        )
+        repository.agregarBuzo(buzoTemporal)
+        assertTrue(repository.buzos.value.any { it.id == buzoTemporal.id })
+
+        val resultEliminar = repository.eliminarBuzo(buzoTemporal.id)
+        assertTrue(resultEliminar.isSuccess)
+        assertFalse(repository.buzos.value.any { it.id == buzoTemporal.id })
+    }
+
+    @Test
+    fun testEliminarBuzo_conFaenaEnCursoFalla() {
+        // Rodrigo Mansilla Cárdenas tiene la faena F-102 en estado "Autorizada y en Curso"
+        val buzo3 = repository.buzos.value.first { it.nombre.contains("Rodrigo Mansilla", ignoreCase = true) }
+        val result = repository.eliminarBuzo(buzo3.id)
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("faena en curso") == true)
+    }
+
+    @Test
+    fun testAgregarEmpresa_exitoso() {
+        val nuevaEmpresa = "Empresa Austral Diving Ltda"
+        val result = repository.agregarEmpresa(nuevaEmpresa)
+        assertTrue(result.isSuccess)
+        assertTrue(repository.empresas.contains(nuevaEmpresa))
+    }
+
+    @Test
+    fun testSecurityUtils_validacionTelefono() {
+        val (okValido, _) = SecurityUtils.validarTelefono("+56 9 8451 2290")
+        assertTrue(okValido)
+
+        val (okVacio, _) = SecurityUtils.validarTelefono("")
+        assertTrue(okVacio) // Teléfono opcional
+
+        val (okCorto, errCorto) = SecurityUtils.validarTelefono("123")
+        assertFalse(okCorto)
+        assertNotNull(errCorto)
+    }
 }
