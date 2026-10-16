@@ -53,6 +53,11 @@ fun AquaRegistroApp(
     val usuarioActivo by repository.prevencionistaActivo.collectAsState()
     val isDrawerEnabled = currentRoute != Screen.Login.route
 
+    // Evita que el Drawer se abra solo al entrar a la app o cambiar de pantalla
+    LaunchedEffect(currentRoute) {
+        drawerState.close()
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         gesturesEnabled = isDrawerEnabled,
