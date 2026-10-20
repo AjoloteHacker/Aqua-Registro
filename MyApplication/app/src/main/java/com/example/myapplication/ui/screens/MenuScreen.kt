@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,17 +17,27 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.data.repository.AquaRepository
 import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
 
+/**
+ * Pantalla Principal adaptada fielmente al boceto de diseño de operaciones submarinas:
+ * - Ítem 1 (Hero Action Central): Botón circular de embarcación para Registrar Faena (AST).
+ * - Ítems 2, 3 y 4 (Tarjetas inferiores): Buzos (+), Historial de Faenas (Checklist/Aprobación) y Cuadrilla/Turno.
+ * - Encuestas y control de equipos retirados como botones sueltos (se integran al flujo de faena).
+ */
 @Composable
 fun MenuScreen(
     navController: NavController,
@@ -37,11 +48,14 @@ fun MenuScreen(
     val buzos by repository.buzos.collectAsState()
     val faenas by repository.faenas.collectAsState()
 
+    val buzosAptos = remember(buzos) { buzos.count { it.estadoSalud == EstadoSalud.APTO } }
+    val faenasPendientes = remember(faenas) { faenas.count { !it.aprobadaPorSupervisor } }
+
     val snackbarHostState = remember { SnackbarHostState() }
 
     AquaScaffold(
-        title = "Aqua-Registro",
-        subtitle = "Prevencionista: ${prevencionista?.nombre ?: "Sin sesión"}",
+        title = prevencionista?.nombre ?: "Aqua-Registro",
+        subtitle = "Base: ${prevencionista?.centro ?: "AquaChile"} · SEREMI: ${prevencionista?.registroSeremi ?: "S/R"}",
         snackbarHostState = snackbarHostState,
         onOpenDrawer = onOpenDrawer,
         actions = {
@@ -66,49 +80,51 @@ fun MenuScreen(
                 .background(AquaBackground)
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Tarjeta de estado operativo de la base
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = Color.White
-                ),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(44.dp)
                             .clip(CircleShape)
-                            .background(AquaSecondary.copy(alpha = 0.2f)),
+                            .background(AquaSecondary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.LocationOn,
                             contentDescription = "Ubicación",
                             tint = AquaPrimary,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = prevencionista?.centro ?: "Base Central",
+                            text = prevencionista?.centro ?: "Centro Operativo Melinka",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = AquaTextPrimary
+                            fontSize = 14.sp,
+                            color = AquaTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "AquaChile · ${buzos.size} buzos registrados en turno",
-                            fontSize = 13.sp,
+                            text = "AquaChile · ${buzos.size} buzos registrados (${buzosAptos} aptos)",
+                            fontSize = 12.sp,
                             color = AquaTextSecondary
                         )
                     }
@@ -118,7 +134,7 @@ fun MenuScreen(
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
-                            text = "OPERATIVO",
+                            text = "ACTIVO",
                             color = SafetySuccess,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -128,90 +144,259 @@ fun MenuScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // ==============================================================
+            // ÍTEM 1 DEL BOCETO: BOTÓN HERO CIRCULAR CONCÉNTRICO (EMBARCACIÓN +)
+            // ==============================================================
             Text(
-                text = "Módulos de Seguridad y Control (MVVM)",
+                text = "OPERACIÓN Y AUTORIZACIÓN SUBMARINA",
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                color = AquaTextPrimary,
-                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                color = AquaTextSecondary,
+                letterSpacing = 0.8.sp
             )
 
-            MenuOptionCard(
-                titulo = "Ficha y Registro de Buzos",
-                descripcion = "Administración de buzos, RUT, matrículas DIRECTEMAR y empresas contratistas.",
-                icono = Icons.Default.PersonAdd,
-                colorTema = AquaPrimary,
-                badgeText = "${buzos.size} Buzos",
-                onClick = { navController.navigate(Screen.Buzo.route) }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Anillo exterior concéntrico del boceto
+                Box(
+                    modifier = Modifier
+                        .size(200.dp)
+                        .clip(CircleShape)
+                        .background(AquaPrimary.copy(alpha = 0.08f))
+                        .border(2.dp, AquaPrimary.copy(alpha = 0.25f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Anillo interior
+                    Box(
+                        modifier = Modifier
+                            .size(164.dp)
+                            .clip(CircleShape)
+                            .background(AquaPrimary.copy(alpha = 0.14f))
+                            .border(2.dp, AquaSecondary.copy(alpha = 0.45f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Botón central de acción principal
+                        ElevatedCard(
+                            onClick = { navController.navigate(Screen.Trabajo.route) },
+                            modifier = Modifier.size(134.dp),
+                            shape = CircleShape,
+                            colors = CardDefaults.elevatedCardColors(containerColor = AquaPrimary),
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(AquaPrimary, Color(0xFF0073C6))
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Box(contentAlignment = Alignment.TopEnd) {
+                                        Icon(
+                                            imageVector = Icons.Default.DirectionsBoat,
+                                            contentDescription = "Iniciar Faena",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(46.dp)
+                                        )
+                                        // Badge '+' del boceto
+                                        Box(
+                                            modifier = Modifier
+                                                .offset(x = 8.dp, y = (-4).dp)
+                                                .size(20.dp)
+                                                .clip(CircleShape)
+                                                .background(AquaSecondary),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "Agregar Faena",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Text(
+                                        text = "REGISTRAR",
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 13.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "FAENA (AST)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color.White.copy(alpha = 0.9f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Nota informativa sobre el flujo unificado
+            Surface(
+                color = AquaPrimary.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = AquaPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Flujo Unificado: La faena incluye el control de 2 buzos, chequeo técnico de equipos y evaluación médica.",
+                        fontSize = 11.sp,
+                        color = AquaTextSecondary,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // ==============================================================
+            // ÍTEMS 2, 3 Y 4 DEL BOCETO: LAS 3 TARJETAS INFERIORES
+            // ==============================================================
+            Text(
+                text = "GESTIÓN Y REGISTROS",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = AquaTextSecondary,
+                modifier = Modifier.fillMaxWidth(),
+                letterSpacing = 0.8.sp
             )
 
-            MenuOptionCard(
-                titulo = "Control de Equipos y Seguridad",
-                descripcion = "Checklist de tanques (200 BAR), regulador octopus, BCD, trajes y profundímetro.",
-                icono = Icons.Default.CheckCircle,
-                colorTema = AquaSecondary,
-                badgeText = "9 Puntos",
-                onClick = { navController.navigate(Screen.Equipos.route) }
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // TARJETA 2: BUZOS (Ícono buzo / persona con badge '+')
+                BocetoCard(
+                    modifier = Modifier.weight(1f),
+                    numeroBoceto = "2",
+                    titulo = "Buzos",
+                    subtitulo = "${buzos.size} Registrados",
+                    icono = Icons.Default.Person,
+                    badgeIcon = Icons.Default.Add,
+                    colorTema = AquaPrimary,
+                    onClick = { navController.navigate(Screen.Buzo.route) }
+                )
 
-            MenuOptionCard(
-                titulo = "Encuesta de Salud Pre-Buceo",
-                descripcion = "Control de presión, pulso y declaración de aptitud física/mental antes de la inmersión.",
-                icono = Icons.Default.Favorite,
-                colorTema = Color(0xFFE91E63),
-                badgeText = "Médico",
-                onClick = { navController.navigate(Screen.Salud.route) }
-            )
+                // TARJETA 3: HISTORIAL (Checklist / Faenas realizadas con revisión y aprobación)
+                BocetoCard(
+                    modifier = Modifier.weight(1f),
+                    numeroBoceto = "3",
+                    titulo = "Historial",
+                    subtitulo = "${faenas.size} Faenas",
+                    icono = Icons.Default.FactCheck,
+                    badgeIcon = if (faenasPendientes > 0) Icons.Default.PendingActions else Icons.Default.Check,
+                    colorTema = if (faenasPendientes > 0) SafetyWarning else AquaSecondary,
+                    onClick = { navController.navigate(Screen.Historial.route) }
+                )
 
-            MenuOptionCard(
-                titulo = "Registro de Trabajo y Faena",
-                descripcion = "Planificación AST, asignación de buzo apto, tipo de maniobra y profundidad.",
-                icono = Icons.AutoMirrored.Filled.Assignment,
-                colorTema = AquaPrimary,
-                badgeText = "Autorización",
-                onClick = { navController.navigate(Screen.Trabajo.route) }
-            )
+                // TARJETA 4: CUADRILLA (Buzos aptos en turno / cuadrilla)
+                BocetoCard(
+                    modifier = Modifier.weight(1f),
+                    numeroBoceto = "4",
+                    titulo = "Cuadrilla",
+                    subtitulo = "${buzosAptos} Aptos",
+                    icono = Icons.Default.Groups,
+                    badgeIcon = Icons.Default.CheckCircle,
+                    colorTema = SafetySuccess,
+                    onClick = { navController.navigate(Screen.Buzo.route) }
+                )
+            }
 
-            MenuOptionCard(
-                titulo = "Historial de Inmersiones",
-                descripcion = "Bitácora digital centralizada de todas las faenas submarinas realizadas.",
-                icono = Icons.Default.HistoryEdu,
-                colorTema = AquaSecondary,
-                badgeText = "${faenas.size} Registros",
-                onClick = { navController.navigate(Screen.Historial.route) }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
         }
     }
 }
 
+/**
+ * Tarjeta rectangular vertical correspondiente a los ítems 2, 3 y 4 del boceto a mano.
+ */
 @Composable
-fun MenuOptionCard(
+private fun BocetoCard(
+    modifier: Modifier = Modifier,
+    numeroBoceto: String,
     titulo: String,
-    descripcion: String,
+    subtitulo: String,
     icono: ImageVector,
+    badgeIcon: ImageVector? = null,
     colorTema: Color,
-    badgeText: String,
     onClick: () -> Unit
 ) {
     ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
+            .height(145.dp)
             .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // Cabecera de la tarjeta con número de referencia del boceto y badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    color = colorTema.copy(alpha = 0.12f),
+                    shape = CircleShape
+                ) {
+                    Text(
+                        text = numeroBoceto,
+                        color = colorTema,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+
+                if (badgeIcon != null) {
+                    Icon(
+                        imageVector = badgeIcon,
+                        contentDescription = null,
+                        tint = colorTema,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            // Ícono principal
             Box(
                 modifier = Modifier
-                    .size(50.dp)
+                    .size(46.dp)
                     .clip(CircleShape)
                     .background(colorTema.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
@@ -220,52 +405,30 @@ fun MenuOptionCard(
                     imageVector = icono,
                     contentDescription = titulo,
                     tint = colorTema,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(26.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = titulo,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = AquaTextPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Surface(
-                        color = colorTema.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = badgeText,
-                            color = colorTema,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
+            // Textos descriptivos
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = descripcion,
-                    fontSize = 12.sp,
+                    text = titulo,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = AquaTextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = subtitulo,
+                    fontSize = 10.sp,
                     color = AquaTextSecondary,
-                    lineHeight = 16.sp
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
                 )
             }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Ir",
-                tint = Color.LightGray
-            )
         }
     }
 }
