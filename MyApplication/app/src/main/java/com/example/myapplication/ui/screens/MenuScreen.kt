@@ -49,7 +49,7 @@ fun MenuScreen(
     val faenas by repository.faenas.collectAsState()
 
     val buzosAptos = remember(buzos) { buzos.count { it.estadoSalud == EstadoSalud.APTO } }
-    val faenasPendientes = remember(faenas) { faenas.count { !it.aprobadaPorSupervisor } }
+    val faenasPendientes = remember(faenas) { faenas.count { it.estado != "Completada con Éxito" } }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
