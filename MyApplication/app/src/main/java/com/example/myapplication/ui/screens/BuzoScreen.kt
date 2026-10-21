@@ -320,52 +320,38 @@ fun BuzoScreen(
                         )
 
                         // Selector de Empresa
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedButton(
-                                    onClick = { empresaDropdownExpanded = true },
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { empresaDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp)
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Empresa: ${uiState.empresaSeleccionada.take(20)}${if (uiState.empresaSeleccionada.length > 20) "..." else ""}",
-                                            fontSize = 13.sp,
-                                            color = AquaTextPrimary
-                                        )
-                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                                    }
-                                }
-                                DropdownMenu(
-                                    expanded = empresaDropdownExpanded,
-                                    onDismissRequest = { empresaDropdownExpanded = false }
-                                ) {
-                                    uiState.empresasDisponibles.forEach { emp ->
-                                        DropdownMenuItem(
-                                            text = { Text(emp) },
-                                            onClick = {
-                                                viewModel.onEmpresaSeleccionadaChange(emp)
-                                                empresaDropdownExpanded = false
-                                            }
-                                        )
-                                    }
+                                    Text(
+                                        text = "Empresa: ${uiState.empresaSeleccionada.take(20)}${if (uiState.empresaSeleccionada.length > 20) "..." else ""}",
+                                        fontSize = 13.sp,
+                                        color = AquaTextPrimary
+                                    )
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
                                 }
                             }
-                            Spacer(Modifier.width(6.dp))
-                            IconButton(
-                                onClick = { viewModel.openNuevaEmpresaDialog() },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(AquaSecondary.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                            DropdownMenu(
+                                expanded = empresaDropdownExpanded,
+                                onDismissRequest = { empresaDropdownExpanded = false }
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "Nueva Empresa", tint = AquaPrimary)
+                                uiState.empresasDisponibles.forEach { emp ->
+                                    DropdownMenuItem(
+                                        text = { Text(emp) },
+                                        onClick = {
+                                            viewModel.onEmpresaSeleccionadaChange(emp)
+                                            empresaDropdownExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
 
@@ -421,40 +407,6 @@ fun BuzoScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { viewModel.closeAddDialog() }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
-        // Diálogo para Registrar Nueva Empresa
-        if (uiState.showNuevaEmpresaDialog) {
-            AlertDialog(
-                onDismissRequest = { viewModel.closeNuevaEmpresaDialog() },
-                title = { Text("Nueva Empresa Contratista", fontWeight = FontWeight.Bold, color = AquaPrimary) },
-                text = {
-                    Column {
-                        Text("Ingresa el nombre de la empresa de buceo para añadirla a los registros:", fontSize = 13.sp)
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = uiState.nuevaEmpresaNombre,
-                            onValueChange = { viewModel.onNuevaEmpresaNombreChange(it) },
-                            label = { Text("Nombre de la empresa *") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { viewModel.guardarNuevaEmpresa() },
-                        colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
-                    ) {
-                        Text("Añadir Empresa")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.closeNuevaEmpresaDialog() }) {
                         Text("Cancelar")
                     }
                 }

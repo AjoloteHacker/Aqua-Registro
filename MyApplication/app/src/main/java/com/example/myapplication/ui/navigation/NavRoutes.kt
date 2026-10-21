@@ -21,8 +21,9 @@ sealed class Screen(
     object Salud : Screen("salud", "Encuesta de Salud", Icons.Default.Favorite)
     object Trabajo : Screen("trabajo", "Registro de Faena", Icons.AutoMirrored.Filled.Assignment)
     object Historial : Screen("historial", "Historial de Inmersiones", Icons.Default.History)
+    object Empresas : Screen("empresas", "Empresas Contratistas", Icons.Default.Business)
 
     companion object {
-        val drawerScreens = listOf(Menu, Buzo, Equipos, Salud, Trabajo, Historial)
+        val drawerScreens = listOf(Menu, Buzo, Equipos, Salud, Trabajo, Historial, Empresas)
     }
 }
