@@ -25,12 +25,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.data.repository.AquaRepository
 import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.BuzoViewModel
 
 /**
  * Pantalla Principal adaptada fielmente al boceto de diseño de operaciones submarinas:
@@ -42,16 +44,29 @@ import com.example.myapplication.ui.theme.*
 fun MenuScreen(
     navController: NavController,
     onOpenDrawer: () -> Unit = {},
-    repository: AquaRepository = AquaRepository.getInstance()
+    repository: AquaRepository = AquaRepository.getInstance(),
+    buzoViewModel: BuzoViewModel = viewModel()
 ) {
     val prevencionista by repository.prevencionistaActivo.collectAsState()
     val buzos by repository.buzos.collectAsState()
     val faenas by repository.faenas.collectAsState()
+    val buzoUiState by buzoViewModel.uiState.collectAsState()
 
     val buzosAptos = remember(buzos) { buzos.count { it.estadoSalud == EstadoSalud.APTO } }
     val faenasPendientes = remember(faenas) { faenas.count { it.estado != "Completada con Éxito" } }
 
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var empresaDropdownExpanded by remember { mutableStateOf(false) }
+    var categoriaDropdownExpanded by remember { mutableStateOf(false) }
+    var vigenciaDropdownExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(buzoUiState.userMessage) {
+        buzoUiState.userMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            buzoViewModel.clearUserMessage()
+        }
+    }
 
     AquaScaffold(
         title = prevencionista?.nombre ?: "Aqua-Registro",
@@ -293,16 +308,16 @@ fun MenuScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // TARJETA 2: BUZOS (Ícono buzo / persona con badge '+')
+                // TARJETA 2: AGREGAR BUZO (abre el diálogo directamente)
                 BocetoCard(
                     modifier = Modifier.weight(1f),
                     numeroBoceto = "2",
-                    titulo = "Buzos",
+                    titulo = "Agregar\nBuzo",
                     subtitulo = "${buzos.size} Registrados",
-                    icono = Icons.Default.Person,
+                    icono = Icons.Default.PersonAdd,
                     badgeIcon = Icons.Default.Add,
                     colorTema = AquaPrimary,
-                    onClick = { navController.navigate(Screen.Buzo.route) }
+                    onClick = { buzoViewModel.openAddDialog() }
                 )
 
                 // TARJETA 3: HISTORIAL (Checklist / Faenas realizadas con revisión y aprobación)
@@ -331,6 +346,244 @@ fun MenuScreen(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
+        }
+
+        // Diálogo para Registrar Nuevo Buzo (desde la pantalla principal)
+        if (buzoUiState.showAddDialog && buzoUiState.buzoAEditar == null) {
+            AlertDialog(
+                onDismissRequest = { buzoViewModel.closeAddDialog() },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.PersonAdd,
+                            contentDescription = null,
+                            tint = AquaPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Registrar Nuevo Buzo",
+                            fontWeight = FontWeight.Bold,
+                            color = AquaPrimary
+                        )
+                    }
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        OutlinedTextField(
+                            value = buzoUiState.nuevoNombre,
+                            onValueChange = { buzoViewModel.onNuevoNombreChange(it) },
+                            label = { Text("Nombre y Apellidos *") },
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = buzoUiState.nuevoRut,
+                            onValueChange = { buzoViewModel.onNuevoRutChange(it) },
+                            label = { Text("RUT (ej: 18.234.567-8) *") },
+                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Selector de Categoría DIRECTEMAR
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { categoriaDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Categoría: ${buzoUiState.nuevaCategoria}", fontSize = 13.sp, color = AquaTextPrimary)
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = categoriaDropdownExpanded,
+                                onDismissRequest = { categoriaDropdownExpanded = false }
+                            ) {
+                                buzoViewModel.categoriasDisponibles.forEach { cat ->
+                                    DropdownMenuItem(
+                                        text = { Text(cat) },
+                                        onClick = {
+                                            buzoViewModel.onNuevaCategoriaChange(cat)
+                                            categoriaDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = buzoUiState.nuevaMatricula,
+                            onValueChange = { buzoViewModel.onNuevaMatriculaChange(it) },
+                            label = { Text("Matrícula Marítima DIRECTEMAR") },
+                            placeholder = { Text("ej: Matrícula N° 2394") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = buzoUiState.nuevoTelefono,
+                            onValueChange = { buzoViewModel.onNuevoTelefonoChange(it) },
+                            label = { Text("Teléfono de Contacto") },
+                            placeholder = { Text("+56 9 8451 2290") },
+                            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Selector de Empresa
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                OutlinedButton(
+                                    onClick = { empresaDropdownExpanded = true },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Empresa: ${buzoUiState.empresaSeleccionada.take(20)}${if (buzoUiState.empresaSeleccionada.length > 20) "..." else ""}",
+                                            fontSize = 13.sp,
+                                            color = AquaTextPrimary
+                                        )
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
+                                    }
+                                }
+                                DropdownMenu(
+                                    expanded = empresaDropdownExpanded,
+                                    onDismissRequest = { empresaDropdownExpanded = false }
+                                ) {
+                                    buzoUiState.empresasDisponibles.forEach { emp ->
+                                        DropdownMenuItem(
+                                            text = { Text(emp) },
+                                            onClick = {
+                                                buzoViewModel.onEmpresaSeleccionadaChange(emp)
+                                                empresaDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            IconButton(
+                                onClick = { buzoViewModel.openNuevaEmpresaDialog() },
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(AquaSecondary.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Nueva Empresa", tint = AquaPrimary)
+                            }
+                        }
+
+                        // Selector de Vigencia de Matrícula
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { vigenciaDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Vigencia Matrícula: ${buzoUiState.nuevaVigencia}", fontSize = 13.sp, color = AquaTextPrimary)
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = vigenciaDropdownExpanded,
+                                onDismissRequest = { vigenciaDropdownExpanded = false }
+                            ) {
+                                buzoViewModel.vigenciasDisponibles.forEach { vig ->
+                                    DropdownMenuItem(
+                                        text = { Text(vig) },
+                                        onClick = {
+                                            buzoViewModel.onNuevaVigenciaChange(vig)
+                                            vigenciaDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (buzoUiState.error != null) {
+                            Text(
+                                text = buzoUiState.error ?: "",
+                                color = SafetyDanger,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { buzoViewModel.guardarBuzo() },
+                        colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
+                    ) {
+                        Text("Guardar Buzo")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { buzoViewModel.closeAddDialog() }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        // Diálogo para Registrar Nueva Empresa (desde la pantalla principal)
+        if (buzoUiState.showNuevaEmpresaDialog) {
+            AlertDialog(
+                onDismissRequest = { buzoViewModel.closeNuevaEmpresaDialog() },
+                title = { Text("Nueva Empresa Contratista", fontWeight = FontWeight.Bold, color = AquaPrimary) },
+                text = {
+                    Column {
+                        Text("Ingresa el nombre de la empresa de buceo para añadirla a los registros:", fontSize = 13.sp)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = buzoUiState.nuevaEmpresaNombre,
+                            onValueChange = { buzoViewModel.onNuevaEmpresaNombreChange(it) },
+                            label = { Text("Nombre de la empresa *") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { buzoViewModel.guardarNuevaEmpresa() },
+                        colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
+                    ) {
+                        Text("Añadir Empresa")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { buzoViewModel.closeNuevaEmpresaDialog() }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
     }
 }
