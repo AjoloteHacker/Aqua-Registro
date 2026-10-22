@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -20,6 +22,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.ui.components.AquaScaffold
+import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.ui.viewmodels.HistorialViewModel
 
@@ -120,21 +123,37 @@ fun HistorialScreen(
                     items(uiState.faenasFiltradas, key = { it.id }) { faena ->
                         FaenaCard(
                             faena = faena,
-                            onFinalizar = { viewModel.finalizarFaena(faena.id) }
+                            cantidadPendientes = uiState.pendientesPorFaena[faena.id]?.size ?: 0,
+                            onRevisar = { viewModel.abrirRevision(faena.id) }
                         )
                     }
                 }
             }
         }
     }
+
+    uiState.faenaEnRevision?.let { faena ->
+        RevisionFaenaDialog(
+            faena = faena,
+            pendientes = uiState.pendientesPorFaena[faena.id].orEmpty(),
+            novedades = uiState.novedadesPorFaena[faena.id].orEmpty(),
+            onIrAEquipos = {
+                viewModel.prepararRevisionEquipos(faena.id)
+                navController.navigate(Screen.Equipos.route) { launchSingleTop = true }
+            },
+            onFinalizar = { viewModel.finalizarFaena(faena.id) },
+            onDismiss = { viewModel.cerrarRevision() }
+        )
+    }
 }
 
 @Composable
 fun FaenaCard(
     faena: RegistroFaena,
-    onFinalizar: () -> Unit
+    cantidadPendientes: Int,
+    onRevisar: () -> Unit
 ) {
-    val enCurso = faena.estado.contains("Curso", ignoreCase = true)
+    val enCurso = faena.enCurso
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -222,21 +241,140 @@ fun FaenaCard(
                         fontSize = 11.sp,
                         color = AquaTextSecondary
                     )
+                    if (enCurso) {
+                        Text(
+                            text = if (cantidadPendientes == 0) {
+                                "Lista para finalizar"
+                            } else {
+                                "$cantidadPendientes pendiente(s)"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (cantidadPendientes == 0) {
+                                SafetySuccess
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
+                    }
                 }
 
                 if (enCurso) {
                     OutlinedButton(
-                        onClick = onFinalizar,
+                        onClick = onRevisar,
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetySuccess)
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Finalizar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Revisar y finalizar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+fun RevisionFaenaDialog(
+    faena: RegistroFaena,
+    pendientes: List<String>,
+    novedades: List<String>,
+    onIrAEquipos: () -> Unit,
+    onFinalizar: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Revisión de inmersión ${faena.id}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "🤿 ${faena.buzoNombre}  ·  📍 ${faena.centroCultivo}",
+                    fontSize = 12.sp,
+                    color = AquaTextSecondary
+                )
+
+                if (pendientes.isEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = SafetySuccess,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Todo verificado. La faena puede finalizarse.",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SafetySuccess
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Pendientes (${pendientes.size})",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    pendientes.forEach { pendiente ->
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = pendiente, fontSize = 12.sp, color = AquaTextPrimary)
+                        }
+                    }
+                }
+
+                if (novedades.isNotEmpty()) {
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+                    Text(
+                        text = "Novedades de equipos (se reportan, no bloquean)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AquaTextPrimary
+                    )
+                    novedades.forEach { novedad ->
+                        Text(text = "• $novedad", fontSize = 12.sp, color = AquaTextSecondary)
+                    }
+                }
+
+                if (pendientes.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = onIrAEquipos,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Ir a Control de Equipos", fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onFinalizar, enabled = pendientes.isEmpty()) {
+                Text("Finalizar faena")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cerrar") }
+        }
+    )
 }

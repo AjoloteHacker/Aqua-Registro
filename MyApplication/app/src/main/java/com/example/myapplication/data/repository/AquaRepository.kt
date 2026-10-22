@@ -9,8 +9,9 @@ import kotlinx.coroutines.flow.update
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.example.myapplication.data.model.EtapaComprobacion
-import com.example.myapplication.data.model.RevisionEquipo
+
+/** Clave de una revisión: (faenaId, etapa, equipoId). */
+typealias ClaveRevision = Triple<String, EtapaComprobacion, String>
 
 /**
  * Repositorio central de la aplicación.
@@ -97,13 +98,36 @@ class AquaRepository private constructor() {
         )
     )
     val buzos: StateFlow<List<Buzo>> = _buzos.asStateFlow()
+
     private val _equiposPorBuzo = MutableStateFlow<Map<String, List<EquipoChequeo>>>(emptyMap())
     val equiposPorBuzo: StateFlow<Map<String, List<EquipoChequeo>>> = _equiposPorBuzo.asStateFlow()
+
+    // Revisiones de equipos y etapas confirmadas, POR FAENA (reactivas, para que Historial se actualice solo)
+    private val _revisiones = MutableStateFlow<Map<ClaveRevision, RevisionEquipo>>(emptyMap())
+    val revisiones: StateFlow<Map<ClaveRevision, RevisionEquipo>> = _revisiones.asStateFlow()
+
+    private val _etapasConfirmadas =
+        MutableStateFlow<Set<Pair<String, EtapaComprobacion>>>(emptySet())
+    val etapasConfirmadas: StateFlow<Set<Pair<String, EtapaComprobacion>>> =
+        _etapasConfirmadas.asStateFlow()
+
+    // Solicitud "ir a revisar esta faena" (Historial -> Control de Equipos)
+    private val _faenaARevisar = MutableStateFlow<String?>(null)
+    val faenaARevisar: StateFlow<String?> = _faenaARevisar.asStateFlow()
+
+    fun solicitarRevisionDe(faenaId: String) {
+        _faenaARevisar.value = faenaId
+    }
+
+    fun limpiarSolicitudRevision() {
+        _faenaARevisar.value = null
+    }
 
     private val _faenas = MutableStateFlow<List<RegistroFaena>>(
         listOf(
             RegistroFaena(
                 id = "F-101",
+                buzoId = "1",
                 buzoNombre = "Carlos Soto Paredes",
                 empresa = "Servicios Submarinos Austral SpA",
                 centroCultivo = "Centro Melinka 1 - Canal Moraleda",
@@ -111,10 +135,11 @@ class AquaRepository private constructor() {
                 profundidadMetros = 18,
                 tiempoMinutos = 40,
                 fechaHora = "15/09/2026 09:00",
-                estado = "Completada con Éxito"
+                estado = RegistroFaena.ESTADO_COMPLETADA
             ),
             RegistroFaena(
                 id = "F-102",
+                buzoId = "3",
                 buzoNombre = "Rodrigo Mansilla Cárdenas",
                 empresa = "Buceos del Sur S.A.",
                 centroCultivo = "Centro Chiloé Norte - Isla Lemuy",
@@ -122,7 +147,7 @@ class AquaRepository private constructor() {
                 profundidadMetros = 22,
                 tiempoMinutos = 35,
                 fechaHora = "15/09/2026 10:30",
-                estado = "Autorizada y en Curso"
+                estado = RegistroFaena.ESTADO_EN_CURSO
             )
         )
     )
@@ -239,8 +264,8 @@ class AquaRepository private constructor() {
             ?: return Result.failure(NoSuchElementException("Buzo no encontrado"))
 
         val tieneFaenaEnCurso = _faenas.value.any {
-            it.buzoNombre.equals(buzo.nombre, ignoreCase = true) &&
-            it.estado.contains("Curso", ignoreCase = true)
+            (it.buzoId == buzoId || it.buzoNombre.equals(buzo.nombre, ignoreCase = true)) &&
+            it.enCurso
         }
         if (tieneFaenaEnCurso) {
             return Result.failure(IllegalStateException("No es posible eliminar a ${buzo.nombre} porque tiene una faena en curso."))
@@ -288,23 +313,73 @@ class AquaRepository private constructor() {
         }
     }
 
+    // Revisiones y etapas: cada faena tiene su propio checklist, evidencia y etapas confirmadas
+    fun obtenerRevisiones(faenaId: String, etapa: EtapaComprobacion): List<RevisionEquipo> =
+        _revisiones.value
+            .filterKeys { it.first == faenaId && it.second == etapa }
+            .values
+            .toList()
+
+    fun guardarRevision(faenaId: String, etapa: EtapaComprobacion, revision: RevisionEquipo) {
+        _revisiones.update { actual ->
+            actual + (Triple(faenaId, etapa, revision.equipoId) to revision)
+        }
+    }
+
+    fun confirmarEtapa(faenaId: String, etapa: EtapaComprobacion) {
+        _etapasConfirmadas.update { it + (faenaId to etapa) }
+    }
+
+    fun etapaConfirmada(faenaId: String, etapa: EtapaComprobacion): Boolean =
+        (faenaId to etapa) in _etapasConfirmadas.value
+
+    /** Catálogo de equipos del buzo de la faena + revisiones guardadas de ESA faena. */
+    fun revisionesCombinadas(faena: RegistroFaena, etapa: EtapaComprobacion): List<RevisionEquipo> {
+        val guardadas = obtenerRevisiones(faena.id, etapa).associateBy { it.equipoId }
+        return obtenerEquiposParaBuzo(faena.buzoId).map { eq ->
+            guardadas[eq.id] ?: RevisionEquipo(
+                equipoId = eq.id,
+                categoria = "General", // EquipoChequeo aún no tiene categoría
+                nombre = eq.nombre,
+                descripcionUso = eq.descripcion
+            )
+        }
+    }
+
+    /** Foto actual de la faena (salud del buzo + revisiones + etapas confirmadas) para evaluarla. */
+    fun avanceDe(faena: RegistroFaena): AvanceFaena {
+        val etapas = EtapaComprobacion.entries.associateWith { etapa ->
+            revisionesCombinadas(faena, etapa)
+        }
+        val confirmadas = _etapasConfirmadas.value
+            .filter { it.first == faena.id }
+            .map { it.second }
+            .toSet()
+        return AvanceFaena(
+            buzo = _buzos.value.firstOrNull { it.id == faena.buzoId },
+            etapas = etapas,
+            etapasConfirmadas = confirmadas
+        )
+    }
+
     // Faenas e Inmersiones
     fun autorizarFaena(faena: RegistroFaena): Result<Unit> {
         _faenas.update { listOf(faena) + it }
         return Result.success(Unit)
     }
 
-    fun completarFaena(faenaId: String): Result<Unit> {
-        val index = _faenas.value.indexOfFirst { it.id == faenaId }
-        return if (index != -1) {
+    /**
+     * Finaliza la faena solo si la propia faena lo permite (ver [RegistroFaena.pendientes]).
+     * Si falta algo, devuelve un [FaenaIncompletaException] con la lista de pendientes.
+     */
+    fun completarFaena(faenaId: String): Result<RegistroFaena> {
+        val faena = _faenas.value.firstOrNull { it.id == faenaId }
+            ?: return Result.failure(NoSuchElementException("Faena no encontrada"))
+
+        return faena.finalizar(avanceDe(faena)).onSuccess { finalizada ->
             _faenas.update { lista ->
-                lista.map {
-                    if (it.id == faenaId) it.copy(estado = "Completada con Éxito") else it
-                }
+                lista.map { if (it.id == faenaId) finalizada else it }
             }
-            Result.success(Unit)
-        } else {
-            Result.failure(NoSuchElementException("Faena no encontrada"))
         }
     }
 
@@ -323,17 +398,4 @@ class AquaRepository private constructor() {
             }
         }
     }
-    // Dentro de AquaRepository
-    private val revisiones = mutableMapOf<Triple<String, EtapaComprobacion, String>, RevisionEquipo>()
-    private val etapasConfirmadas = mutableSetOf<Pair<String, EtapaComprobacion>>()
-
-    fun obtenerRevisiones(buzoId: String, etapa: EtapaComprobacion): List<RevisionEquipo> =
-        revisiones.filterKeys { it.first == buzoId && it.second == etapa }.values.toList()
-
-    fun guardarRevision(buzoId: String, etapa: EtapaComprobacion, revision: RevisionEquipo) {
-        revisiones[Triple(buzoId, etapa, revision.equipoId)] = revision
-    }
-
-    fun confirmarEtapa(buzoId: String, etapa: EtapaComprobacion) {
-        etapasConfirmadas += buzoId to etapa
-    }}
+}

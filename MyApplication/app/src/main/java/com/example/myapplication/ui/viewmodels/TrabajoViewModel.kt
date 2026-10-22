@@ -118,6 +118,7 @@ class TrabajoViewModel(
 
         val nuevaFaena = RegistroFaena(
             id = nuevoFolio,
+            buzoId = buzo.id,
             buzoNombre = buzo.nombre,
             empresa = buzo.empresa,
             centroCultivo = state.centroCultivo,
