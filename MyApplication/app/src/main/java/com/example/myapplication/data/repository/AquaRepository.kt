@@ -86,7 +86,8 @@ class AquaRepository private constructor() {
                 matricula = "Buzo Comercial N° 2394",
                 telefono = "+56 9 8451 2290",
                 estadoSalud = EstadoSalud.APTO,
-                ultimoChequeo = "15/09/2026 - 08:30 hrs"
+                ultimoChequeo = "15/09/2026 - 08:30 hrs",
+                fotoUrl = "https://randomuser.me/api/portraits/men/32.jpg"
             ),
             Buzo(
                 id = "2",
@@ -96,7 +97,8 @@ class AquaRepository private constructor() {
                 matricula = "Buzo Básico N° 5812",
                 telefono = "+56 9 7123 9940",
                 estadoSalud = EstadoSalud.PENDIENTE,
-                ultimoChequeo = "Pendiente de faena"
+                ultimoChequeo = "Pendiente de faena",
+                fotoUrl = "https://randomuser.me/api/portraits/men/44.jpg"
             ),
             Buzo(
                 id = "3",
@@ -106,7 +108,8 @@ class AquaRepository private constructor() {
                 matricula = "Buzo Especialista N° 1042",
                 telefono = "+56 9 9234 5512",
                 estadoSalud = EstadoSalud.APTO,
-                ultimoChequeo = "15/09/2026 - 09:15 hrs"
+                ultimoChequeo = "15/09/2026 - 09:15 hrs",
+                fotoUrl = "https://randomuser.me/api/portraits/men/68.jpg"
             )
         )
     )

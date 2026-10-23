@@ -1,5 +1,6 @@
 package com.example.myapplication.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -24,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.myapplication.R
 import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.ui.viewmodels.AuthViewModel
@@ -57,28 +61,18 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Box(
+            Image(
+                painter = painterResource(id = R.drawable.ic_aquachile_emblem),
+                contentDescription = "Logo AquaChile",
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(AquaPrimary, AquaSecondary)
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.WaterDrop,
-                    contentDescription = "Logo Aqua-Registro",
-                    tint = Color.White,
-                    modifier = Modifier.size(46.dp)
-                )
-            }
+                    .size(90.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Fit
+            )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
                 text = "Aqua-Registro",
@@ -88,7 +82,7 @@ fun LoginScreen(
             )
 
             Text(
-                text = "Seguridad y Control de Buceo · AquaChile",
+                text = "Seguridad y Control de Buceo Submarino",
                 style = MaterialTheme.typography.bodyMedium,
                 color = AquaTextSecondary
             )
