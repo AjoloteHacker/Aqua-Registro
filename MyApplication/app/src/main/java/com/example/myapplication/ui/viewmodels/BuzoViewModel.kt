@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.model.Buzo
 import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.util.RandomUserGenerator
 import com.example.myapplication.util.Rutificador
 import com.example.myapplication.util.SecurityUtils
 import kotlinx.coroutines.flow.*
@@ -24,6 +25,8 @@ data class BuzoUiState(
     val nuevaCategoria: String = "Buzo Comercial",
     val nuevoTelefono: String = "",
     val nuevaVigencia: String = "Al día",
+    val nuevaFotoUrl: String = "",
+    val cargandoFoto: Boolean = false,
     val empresaSeleccionada: String = "",
     val empresasDisponibles: List<String> = emptyList(),
     val showNuevaEmpresaDialog: Boolean = false,
@@ -122,6 +125,7 @@ class BuzoViewModel(
                 nuevaCategoria = categoriasDisponibles.first(),
                 nuevoTelefono = "",
                 nuevaVigencia = vigenciasDisponibles.first(),
+                nuevaFotoUrl = RandomUserGenerator.generarUrlFallback(),
                 empresaSeleccionada = it.empresasDisponibles.firstOrNull() ?: "",
                 error = null
             )
@@ -140,8 +144,17 @@ class BuzoViewModel(
                 nuevoTelefono = buzo.telefono,
                 nuevaVigencia = if (buzo.vigenciaMatricula in vigenciasDisponibles) buzo.vigenciaMatricula else vigenciasDisponibles.first(),
                 empresaSeleccionada = buzo.empresa,
+                nuevaFotoUrl = buzo.fotoUrl ?: RandomUserGenerator.generarUrlFallback(),
                 error = null
             )
+        }
+    }
+
+    fun generarFotoAleatoria() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(cargandoFoto = true) }
+            val nuevaUrl = RandomUserGenerator.obtenerFotoAleatoria()
+            _uiState.update { it.copy(nuevaFotoUrl = nuevaUrl, cargandoFoto = false) }
         }
     }
 
@@ -276,7 +289,8 @@ class BuzoViewModel(
                 categoria = state.nuevaCategoria,
                 vigenciaMatricula = state.nuevaVigencia,
                 estadoSalud = EstadoSalud.PENDIENTE,
-                ultimoChequeo = "Pendiente de faena"
+                ultimoChequeo = "Pendiente de faena",
+                fotoUrl = state.nuevaFotoUrl.ifBlank { RandomUserGenerator.generarUrlFallback() }
             )
 
             val result = repository.agregarBuzo(nuevo)
@@ -304,7 +318,8 @@ class BuzoViewModel(
                 matricula = matriculaFinal,
                 telefono = telefonoFinal,
                 categoria = state.nuevaCategoria,
-                vigenciaMatricula = state.nuevaVigencia
+                vigenciaMatricula = state.nuevaVigencia,
+                fotoUrl = state.nuevaFotoUrl.ifBlank { buzoAEditar.fotoUrl ?: RandomUserGenerator.generarUrlFallback() }
             )
 
             val result = repository.editarBuzo(actualizado)

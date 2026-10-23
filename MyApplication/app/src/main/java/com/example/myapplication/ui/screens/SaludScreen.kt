@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ScubaDiving
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
@@ -119,12 +120,26 @@ fun SaludScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = uiState.buzoSeleccionado?.let { "🤿 ${it.nombre} (${it.rut})" }
-                                ?: "Seleccionar buzo",
-                            color = AquaTextPrimary,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            if (uiState.buzoSeleccionado != null) {
+                                Icon(
+                                    imageVector = Icons.Default.ScubaDiving,
+                                    contentDescription = null,
+                                    tint = AquaPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text(
+                                text = uiState.buzoSeleccionado?.let { "${it.nombre} (${it.rut})" }
+                                    ?: "Seleccionar buzo",
+                                color = AquaTextPrimary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                         Icon(Icons.Default.ArrowDropDown, contentDescription = "Desplegar")
                     }
                 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -175,31 +176,67 @@ fun FaenaCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "🤿 ${faena.buzoNombre}",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp,
-                color = AquaTextPrimary
-            )
-            Text(
-                text = "🏢 ${faena.empresa}",
-                fontSize = 12.sp,
-                color = AquaTextSecondary
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.ScubaDiving,
+                    contentDescription = null,
+                    tint = AquaPrimary,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = faena.buzoNombre,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = AquaTextPrimary
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.CorporateFare,
+                    contentDescription = null,
+                    tint = AquaTextSecondary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = faena.empresa,
+                    fontSize = 12.sp,
+                    color = AquaTextSecondary
+                )
+            }
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            Text(
-                text = "🛠️ ${faena.tipoFaena}",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = AquaTextPrimary
-            )
-            Text(
-                text = "📍 ${faena.centroCultivo}",
-                fontSize = 12.sp,
-                color = AquaTextSecondary
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Engineering,
+                    contentDescription = null,
+                    tint = AquaPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = faena.tipoFaena,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = AquaTextPrimary
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = AquaTextSecondary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = faena.centroCultivo,
+                    fontSize = 12.sp,
+                    color = AquaTextSecondary
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
@@ -217,11 +254,20 @@ fun FaenaCard(
                         fontWeight = FontWeight.Bold,
                         color = AquaSecondary
                     )
-                    Text(
-                        text = "🕒 ${faena.fechaHora}",
-                        fontSize = 11.sp,
-                        color = AquaTextSecondary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.EventNote,
+                            contentDescription = null,
+                            tint = AquaTextSecondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = faena.fechaHora,
+                            fontSize = 11.sp,
+                            color = AquaTextSecondary
+                        )
+                    }
                 }
 
                 if (enCurso) {
