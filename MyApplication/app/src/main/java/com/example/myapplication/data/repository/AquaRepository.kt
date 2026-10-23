@@ -13,6 +13,19 @@ import java.util.Locale
 /** Clave de una revisión: (faenaId, etapa, equipoId). */
 typealias ClaveRevision = Triple<String, EtapaComprobacion, String>
 
+/** Pantalla a la que se pide llevar la revisión de una faena. */
+enum class DestinoRevision { EQUIPOS, SALUD }
+
+/**
+ * Pedido de Historial a otra pantalla: "revisa esta faena" (y, en Salud, en qué momento).
+ * Cada pantalla solo atiende los pedidos dirigidos a ella.
+ */
+data class SolicitudRevision(
+    val faenaId: String,
+    val destino: DestinoRevision,
+    val momento: MomentoSalud? = null
+)
+
 /**
  * Repositorio central de la aplicación.
  */
@@ -111,16 +124,23 @@ class AquaRepository private constructor() {
     val etapasConfirmadas: StateFlow<Set<Pair<String, EtapaComprobacion>>> =
         _etapasConfirmadas.asStateFlow()
 
-    // Solicitud "ir a revisar esta faena" (Historial -> Control de Equipos)
-    private val _faenaARevisar = MutableStateFlow<String?>(null)
-    val faenaARevisar: StateFlow<String?> = _faenaARevisar.asStateFlow()
+    // Encuestas de salud por faena y momento (ANTES / DESPUÉS)
+    private val _encuestas =
+        MutableStateFlow<Map<Pair<String, MomentoSalud>, EncuestaSalud>>(emptyMap())
+    val encuestas: StateFlow<Map<Pair<String, MomentoSalud>, EncuestaSalud>> =
+        _encuestas.asStateFlow()
 
-    fun solicitarRevisionDe(faenaId: String) {
-        _faenaARevisar.value = faenaId
+    // Pedido "revisa esta faena" (Historial -> Control de Equipos / Encuesta de Salud)
+    private val _solicitudRevision = MutableStateFlow<SolicitudRevision?>(null)
+    val solicitudRevision: StateFlow<SolicitudRevision?> = _solicitudRevision.asStateFlow()
+
+    fun solicitarRevision(solicitud: SolicitudRevision) {
+        _solicitudRevision.value = solicitud
     }
 
-    fun limpiarSolicitudRevision() {
-        _faenaARevisar.value = null
+    /** Limpia el pedido solo si estaba dirigido a [destino] (evita pisar el de otra pantalla). */
+    fun limpiarSolicitud(destino: DestinoRevision) {
+        _solicitudRevision.update { if (it?.destino == destino) null else it }
     }
 
     private val _faenas = MutableStateFlow<List<RegistroFaena>>(
@@ -355,10 +375,16 @@ class AquaRepository private constructor() {
             .filter { it.first == faena.id }
             .map { it.second }
             .toSet()
+        val encuestasDeLaFaena = MomentoSalud.entries
+            .mapNotNull { momento ->
+                _encuestas.value[faena.id to momento]?.let { momento to it }
+            }
+            .toMap()
         return AvanceFaena(
             buzo = _buzos.value.firstOrNull { it.id == faena.buzoId },
             etapas = etapas,
-            etapasConfirmadas = confirmadas
+            etapasConfirmadas = confirmadas,
+            encuestas = encuestasDeLaFaena
         )
     }
 
@@ -381,6 +407,75 @@ class AquaRepository private constructor() {
                 lista.map { if (it.id == faenaId) finalizada else it }
             }
         }
+    }
+
+    private fun actualizarFaena(
+        faenaId: String,
+        cambio: (RegistroFaena) -> Result<RegistroFaena>
+    ): Result<RegistroFaena> {
+        val faena = _faenas.value.firstOrNull { it.id == faenaId }
+            ?: return Result.failure(NoSuchElementException("Faena no encontrada"))
+        return cambio(faena).onSuccess { nueva ->
+            _faenas.update { lista -> lista.map { if (it.id == faenaId) nueva else it } }
+        }
+    }
+
+    private fun nombrePrevencionistaActivo(): String =
+        _prevencionistaActivo.value?.nombre ?: "Prevencionista"
+
+    /** Aprueba que los datos de la faena son correctos (queda registrado quién y cuándo). */
+    fun aprobarDatosFaena(faenaId: String): Result<RegistroFaena> =
+        actualizarFaena(faenaId) { it.aprobar(nombrePrevencionistaActivo(), obtenerFechaHoraActual()) }
+
+    fun revocarAprobacionFaena(faenaId: String): Result<RegistroFaena> =
+        actualizarFaena(faenaId) { it.revocarAprobacion() }
+
+    /** Corrige los datos de la faena; si algo cambia, la aprobación se anula. */
+    fun editarDatosFaena(
+        faenaId: String,
+        centro: String,
+        tipo: String,
+        profundidad: Int?,
+        minutos: Int?
+    ): Result<RegistroFaena> =
+        actualizarFaena(faenaId) { it.conDatos(centro, tipo, profundidad, minutos) }
+
+    /**
+     * Registra la encuesta de salud de una faena en el [momento] indicado, solo si la propia
+     * faena lo permite (ver [RegistroFaena.bloqueoEncuesta]). Si ya había una, la reemplaza.
+     * También deja el último resultado en la ficha del buzo.
+     */
+    fun registrarEncuestaSalud(
+        faenaId: String,
+        momento: MomentoSalud,
+        esApto: Boolean,
+        presionArterial: String,
+        frecuenciaCardiaca: Int
+    ): Result<EncuestaSalud> {
+        val faena = _faenas.value.firstOrNull { it.id == faenaId }
+            ?: return Result.failure(NoSuchElementException("Faena no encontrada"))
+
+        val bloqueo = faena.bloqueoEncuesta(momento, avanceDe(faena))
+        if (bloqueo != null) {
+            return Result.failure(IllegalStateException(bloqueo))
+        }
+
+        val encuesta = EncuestaSalud(
+            faenaId = faenaId,
+            momento = momento,
+            esApto = esApto,
+            presionArterial = presionArterial,
+            frecuenciaCardiaca = frecuenciaCardiaca,
+            registradaPor = nombrePrevencionistaActivo(),
+            registradaEn = obtenerFechaHoraActual()
+        )
+        _encuestas.update { it + ((faenaId to momento) to encuesta) }
+        actualizarSaludBuzo(
+            buzoId = faena.buzoId,
+            nuevoEstado = if (esApto) EstadoSalud.APTO else EstadoSalud.NO_APTO,
+            ultimoChequeo = "${momento.etiqueta} ($faenaId) - PA: $presionArterial mmHg, Pulso: $frecuenciaCardiaca lpm"
+        )
+        return Result.success(encuesta)
     }
 
     fun obtenerFechaHoraActual(): String {

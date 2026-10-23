@@ -101,15 +101,8 @@ class TrabajoViewModel(
             return
         }
 
-        if (buzo.estadoSalud != EstadoSalud.APTO) {
-            _uiState.update {
-                it.copy(
-                    errorMessage = "Acción bloqueada: El buzo '${buzo.nombre}' no se encuentra APTO. Complete la encuesta de salud antes de autorizar faenas submarinas.",
-                    userMessage = "No se puede autorizar inmersión a un buzo no apto."
-                )
-            }
-            return
-        }
+        // La aptitud de salud ya no se exige al autorizar: se evalúa por faena
+        // (encuesta ANTES con el buzo equipado y encuesta DESPUÉS al cerrar).
 
         val prof = state.profundidad.toIntOrNull() ?: 15
         val mins = state.duracionMinutos.toIntOrNull() ?: 30

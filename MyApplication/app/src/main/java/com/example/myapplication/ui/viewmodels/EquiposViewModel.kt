@@ -7,6 +7,7 @@ import com.example.myapplication.data.model.EtapaComprobacion
 import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.data.model.RevisionEquipo
 import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.data.repository.DestinoRevision
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -69,10 +70,10 @@ class EquiposViewModel(
         }
         // Cuando Historial pide revisar una faena concreta, se preselecciona aquí.
         viewModelScope.launch {
-            repository.faenaARevisar.collect { faenaId ->
-                if (faenaId != null) {
-                    seleccionarFaena(faenaId)
-                    repository.limpiarSolicitudRevision()
+            repository.solicitudRevision.collect { solicitud ->
+                if (solicitud != null && solicitud.destino == DestinoRevision.EQUIPOS) {
+                    seleccionarFaena(solicitud.faenaId)
+                    repository.limpiarSolicitud(DestinoRevision.EQUIPOS)
                 }
             }
         }

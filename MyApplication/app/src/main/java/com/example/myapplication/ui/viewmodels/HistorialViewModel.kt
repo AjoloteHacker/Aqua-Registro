@@ -2,8 +2,12 @@ package com.example.myapplication.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.model.MomentoSalud
+import com.example.myapplication.data.model.Pendiente
 import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.data.repository.DestinoRevision
+import com.example.myapplication.data.repository.SolicitudRevision
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,10 +21,14 @@ data class HistorialUiState(
     val selectedFilter: String = "Todas",
     val userMessage: String? = null,
     /** Lo que le falta a cada faena en curso para poder finalizarse (lo calcula la propia faena). */
-    val pendientesPorFaena: Map<String, List<String>> = emptyMap(),
-    /** Equipos riesgosos/inutilizables reportados por faena (informativo, no bloquea). */
+    val pendientesPorFaena: Map<String, List<Pendiente>> = emptyMap(),
+    /** Novedades reportadas por faena (equipos riesgosos, salud DESPUÉS no apta): no bloquean. */
     val novedadesPorFaena: Map<String, List<String>> = emptyMap(),
-    val faenaEnRevisionId: String? = null
+    val faenaEnRevisionId: String? = null,
+    val editandoFaenaId: String? = null,
+    val errorEdicion: String? = null,
+    val centrosDisponibles: List<String> = emptyList(),
+    val tiposFaenaDisponibles: List<String> = emptyList()
 ) {
     val faenasFiltradas: List<RegistroFaena>
         get() = faenas.filter { faena ->
@@ -43,25 +51,35 @@ data class HistorialUiState(
     /** Faena cuyo diálogo de revisión está abierto (null si ninguno, o si ya no está en curso). */
     val faenaEnRevision: RegistroFaena?
         get() = faenas.firstOrNull { it.id == faenaEnRevisionId && it.enCurso }
+
+    /** Faena cuyos datos se están editando (null si ninguna, o si ya no está en curso). */
+    val editandoFaena: RegistroFaena?
+        get() = faenas.firstOrNull { it.id == editandoFaenaId && it.enCurso }
 }
 
 class HistorialViewModel(
     private val repository: AquaRepository = AquaRepository.getInstance()
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(HistorialUiState())
+    private val _uiState = MutableStateFlow(
+        HistorialUiState(
+            centrosDisponibles = repository.centrosCultivo,
+            tiposFaenaDisponibles = repository.tiposFaena
+        )
+    )
     val uiState: StateFlow<HistorialUiState> = _uiState.asStateFlow()
 
     init {
-        // Se recalcula cuando cambian las faenas, la salud de los buzos, las revisiones
-        // de equipos o las etapas confirmadas (por ejemplo, al volver desde Equipos).
+        // Se recalcula cuando cambian las faenas, la salud de los buzos, las revisiones de equipos,
+        // las etapas confirmadas o las encuestas de salud (por ejemplo, al volver desde Equipos o Salud).
         viewModelScope.launch {
             combine(
                 repository.faenas,
                 repository.buzos,
                 repository.revisiones,
-                repository.etapasConfirmadas
-            ) { faenas, _, _, _ -> faenas }
+                repository.etapasConfirmadas,
+                repository.encuestas
+            ) { faenas, _, _, _, _ -> faenas }
                 .collect { faenas -> actualizarFaenas(faenas) }
         }
     }
@@ -73,7 +91,7 @@ class HistorialViewModel(
             faena.id to faena.pendientes(avances.getValue(faena.id))
         }
         val novedades = enCurso.associate { faena ->
-            faena.id to faena.novedadesEquipos(avances.getValue(faena.id))
+            faena.id to faena.novedades(avances.getValue(faena.id))
         }
         _uiState.update { estado ->
             estado.copy(
@@ -90,9 +108,81 @@ class HistorialViewModel(
     fun abrirRevision(faenaId: String) = _uiState.update { it.copy(faenaEnRevisionId = faenaId) }
     fun cerrarRevision() = _uiState.update { it.copy(faenaEnRevisionId = null) }
 
+    // ───────── Datos de la faena ─────────
+
+    fun abrirEdicion(faenaId: String) =
+        _uiState.update { it.copy(editandoFaenaId = faenaId, errorEdicion = null) }
+
+    fun cerrarEdicion() =
+        _uiState.update { it.copy(editandoFaenaId = null, errorEdicion = null) }
+
+    fun editarDatos(
+        faenaId: String,
+        centro: String,
+        tipo: String,
+        profundidad: String,
+        minutos: String
+    ) {
+        repository.editarDatosFaena(
+            faenaId = faenaId,
+            centro = centro,
+            tipo = tipo,
+            profundidad = profundidad.trim().toIntOrNull(),
+            minutos = minutos.trim().toIntOrNull()
+        )
+            .onSuccess {
+                _uiState.update {
+                    it.copy(
+                        editandoFaenaId = null,
+                        errorEdicion = null,
+                        userMessage = "Datos de $faenaId actualizados."
+                    )
+                }
+            }
+            .onFailure { error ->
+                _uiState.update {
+                    it.copy(errorEdicion = error.message ?: "No se pudieron guardar los datos.")
+                }
+            }
+    }
+
+    fun aprobarDatos(faenaId: String) {
+        repository.aprobarDatosFaena(faenaId)
+            .onSuccess {
+                _uiState.update { it.copy(userMessage = "Datos de $faenaId aprobados.") }
+            }
+            .onFailure { error ->
+                _uiState.update { it.copy(userMessage = error.message ?: "No se pudo aprobar la faena $faenaId.") }
+            }
+    }
+
+    fun revocarAprobacion(faenaId: String) {
+        repository.revocarAprobacionFaena(faenaId)
+            .onSuccess {
+                _uiState.update { it.copy(userMessage = "Aprobación de $faenaId anulada.") }
+            }
+            .onFailure { error ->
+                _uiState.update { it.copy(userMessage = error.message ?: "No se pudo anular la aprobación.") }
+            }
+    }
+
+    // ───────── Accesos a otras pantallas ─────────
+
     /** Deja la faena preseleccionada en Control de Equipos y cierra el diálogo. */
-    fun prepararRevisionEquipos(faenaId: String) {
-        repository.solicitarRevisionDe(faenaId)
+    fun irAEquipos(faenaId: String) {
+        repository.solicitarRevision(SolicitudRevision(faenaId, DestinoRevision.EQUIPOS))
+        cerrarRevision()
+    }
+
+    /**
+     * Deja la faena preseleccionada en Encuesta de Salud, con el momento que toca:
+     * ANTES si falta o no resultó apto; DESPUÉS en caso contrario.
+     */
+    fun irASalud(faenaId: String) {
+        val faena = _uiState.value.faenas.firstOrNull { it.id == faenaId } ?: return
+        val antes = repository.avanceDe(faena).encuestas[MomentoSalud.ANTES]
+        val momento = if (antes == null || !antes.esApto) MomentoSalud.ANTES else MomentoSalud.DESPUES
+        repository.solicitarRevision(SolicitudRevision(faenaId, DestinoRevision.SALUD, momento))
         cerrarRevision()
     }
 
