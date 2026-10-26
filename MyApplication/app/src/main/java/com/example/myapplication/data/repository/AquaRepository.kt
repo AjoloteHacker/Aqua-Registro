@@ -9,8 +9,22 @@ import kotlinx.coroutines.flow.update
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.example.myapplication.data.model.EtapaComprobacion
-import com.example.myapplication.data.model.RevisionEquipo
+
+/** Clave de una revisión: (faenaId, etapa, equipoId). */
+typealias ClaveRevision = Triple<String, EtapaComprobacion, String>
+
+/** Pantalla a la que se pide llevar la revisión de una faena. */
+enum class DestinoRevision { EQUIPOS, SALUD }
+
+/**
+ * Pedido de Historial a otra pantalla: "revisa esta faena" (y, en Salud, en qué momento).
+ * Cada pantalla solo atiende los pedidos dirigidos a ella.
+ */
+data class SolicitudRevision(
+    val faenaId: String,
+    val destino: DestinoRevision,
+    val momento: MomentoSalud? = null
+)
 
 /**
  * Repositorio central de la aplicación.
@@ -72,7 +86,8 @@ class AquaRepository private constructor() {
                 matricula = "Buzo Comercial N° 2394",
                 telefono = "+56 9 8451 2290",
                 estadoSalud = EstadoSalud.APTO,
-                ultimoChequeo = "15/09/2026 - 08:30 hrs"
+                ultimoChequeo = "15/09/2026 - 08:30 hrs",
+                fotoUrl = "https://randomuser.me/api/portraits/men/32.jpg"
             ),
             Buzo(
                 id = "2",
@@ -82,7 +97,8 @@ class AquaRepository private constructor() {
                 matricula = "Buzo Básico N° 5812",
                 telefono = "+56 9 7123 9940",
                 estadoSalud = EstadoSalud.PENDIENTE,
-                ultimoChequeo = "Pendiente de faena"
+                ultimoChequeo = "Pendiente de faena",
+                fotoUrl = "https://randomuser.me/api/portraits/men/44.jpg"
             ),
             Buzo(
                 id = "3",
@@ -92,18 +108,49 @@ class AquaRepository private constructor() {
                 matricula = "Buzo Especialista N° 1042",
                 telefono = "+56 9 9234 5512",
                 estadoSalud = EstadoSalud.APTO,
-                ultimoChequeo = "15/09/2026 - 09:15 hrs"
+                ultimoChequeo = "15/09/2026 - 09:15 hrs",
+                fotoUrl = "https://randomuser.me/api/portraits/men/68.jpg"
             )
         )
     )
     val buzos: StateFlow<List<Buzo>> = _buzos.asStateFlow()
+
     private val _equiposPorBuzo = MutableStateFlow<Map<String, List<EquipoChequeo>>>(emptyMap())
     val equiposPorBuzo: StateFlow<Map<String, List<EquipoChequeo>>> = _equiposPorBuzo.asStateFlow()
+
+    // Revisiones de equipos y etapas confirmadas, POR FAENA (reactivas, para que Historial se actualice solo)
+    private val _revisiones = MutableStateFlow<Map<ClaveRevision, RevisionEquipo>>(emptyMap())
+    val revisiones: StateFlow<Map<ClaveRevision, RevisionEquipo>> = _revisiones.asStateFlow()
+
+    private val _etapasConfirmadas =
+        MutableStateFlow<Set<Pair<String, EtapaComprobacion>>>(emptySet())
+    val etapasConfirmadas: StateFlow<Set<Pair<String, EtapaComprobacion>>> =
+        _etapasConfirmadas.asStateFlow()
+
+    // Encuestas de salud por faena y momento (ANTES / DESPUÉS)
+    private val _encuestas =
+        MutableStateFlow<Map<Pair<String, MomentoSalud>, EncuestaSalud>>(emptyMap())
+    val encuestas: StateFlow<Map<Pair<String, MomentoSalud>, EncuestaSalud>> =
+        _encuestas.asStateFlow()
+
+    // Pedido "revisa esta faena" (Historial -> Control de Equipos / Encuesta de Salud)
+    private val _solicitudRevision = MutableStateFlow<SolicitudRevision?>(null)
+    val solicitudRevision: StateFlow<SolicitudRevision?> = _solicitudRevision.asStateFlow()
+
+    fun solicitarRevision(solicitud: SolicitudRevision) {
+        _solicitudRevision.value = solicitud
+    }
+
+    /** Limpia el pedido solo si estaba dirigido a [destino] (evita pisar el de otra pantalla). */
+    fun limpiarSolicitud(destino: DestinoRevision) {
+        _solicitudRevision.update { if (it?.destino == destino) null else it }
+    }
 
     private val _faenas = MutableStateFlow<List<RegistroFaena>>(
         listOf(
             RegistroFaena(
                 id = "F-101",
+                buzoId = "1",
                 buzoNombre = "Carlos Soto Paredes",
                 empresa = "Servicios Submarinos Austral SpA",
                 centroCultivo = "Centro Melinka 1 - Canal Moraleda",
@@ -111,10 +158,11 @@ class AquaRepository private constructor() {
                 profundidadMetros = 18,
                 tiempoMinutos = 40,
                 fechaHora = "15/09/2026 09:00",
-                estado = "Completada con Éxito"
+                estado = RegistroFaena.ESTADO_COMPLETADA
             ),
             RegistroFaena(
                 id = "F-102",
+                buzoId = "3",
                 buzoNombre = "Rodrigo Mansilla Cárdenas",
                 empresa = "Buceos del Sur S.A.",
                 centroCultivo = "Centro Chiloé Norte - Isla Lemuy",
@@ -122,7 +170,7 @@ class AquaRepository private constructor() {
                 profundidadMetros = 22,
                 tiempoMinutos = 35,
                 fechaHora = "15/09/2026 10:30",
-                estado = "Autorizada y en Curso"
+                estado = RegistroFaena.ESTADO_EN_CURSO
             )
         )
     )
@@ -239,8 +287,8 @@ class AquaRepository private constructor() {
             ?: return Result.failure(NoSuchElementException("Buzo no encontrado"))
 
         val tieneFaenaEnCurso = _faenas.value.any {
-            it.buzoNombre.equals(buzo.nombre, ignoreCase = true) &&
-            it.estado.contains("Curso", ignoreCase = true)
+            (it.buzoId == buzoId || it.buzoNombre.equals(buzo.nombre, ignoreCase = true)) &&
+            it.enCurso
         }
         if (tieneFaenaEnCurso) {
             return Result.failure(IllegalStateException("No es posible eliminar a ${buzo.nombre} porque tiene una faena en curso."))
@@ -288,24 +336,149 @@ class AquaRepository private constructor() {
         }
     }
 
+    // Revisiones y etapas: cada faena tiene su propio checklist, evidencia y etapas confirmadas
+    fun obtenerRevisiones(faenaId: String, etapa: EtapaComprobacion): List<RevisionEquipo> =
+        _revisiones.value
+            .filterKeys { it.first == faenaId && it.second == etapa }
+            .values
+            .toList()
+
+    fun guardarRevision(faenaId: String, etapa: EtapaComprobacion, revision: RevisionEquipo) {
+        _revisiones.update { actual ->
+            actual + (Triple(faenaId, etapa, revision.equipoId) to revision)
+        }
+    }
+
+    fun confirmarEtapa(faenaId: String, etapa: EtapaComprobacion) {
+        _etapasConfirmadas.update { it + (faenaId to etapa) }
+    }
+
+    fun etapaConfirmada(faenaId: String, etapa: EtapaComprobacion): Boolean =
+        (faenaId to etapa) in _etapasConfirmadas.value
+
+    /** Catálogo de equipos del buzo de la faena + revisiones guardadas de ESA faena. */
+    fun revisionesCombinadas(faena: RegistroFaena, etapa: EtapaComprobacion): List<RevisionEquipo> {
+        val guardadas = obtenerRevisiones(faena.id, etapa).associateBy { it.equipoId }
+        return obtenerEquiposParaBuzo(faena.buzoId).map { eq ->
+            guardadas[eq.id] ?: RevisionEquipo(
+                equipoId = eq.id,
+                categoria = "General", // EquipoChequeo aún no tiene categoría
+                nombre = eq.nombre,
+                descripcionUso = eq.descripcion
+            )
+        }
+    }
+
+    /** Foto actual de la faena (salud del buzo + revisiones + etapas confirmadas) para evaluarla. */
+    fun avanceDe(faena: RegistroFaena): AvanceFaena {
+        val etapas = EtapaComprobacion.entries.associateWith { etapa ->
+            revisionesCombinadas(faena, etapa)
+        }
+        val confirmadas = _etapasConfirmadas.value
+            .filter { it.first == faena.id }
+            .map { it.second }
+            .toSet()
+        val encuestasDeLaFaena = MomentoSalud.entries
+            .mapNotNull { momento ->
+                _encuestas.value[faena.id to momento]?.let { momento to it }
+            }
+            .toMap()
+        return AvanceFaena(
+            buzo = _buzos.value.firstOrNull { it.id == faena.buzoId },
+            etapas = etapas,
+            etapasConfirmadas = confirmadas,
+            encuestas = encuestasDeLaFaena
+        )
+    }
+
     // Faenas e Inmersiones
     fun autorizarFaena(faena: RegistroFaena): Result<Unit> {
         _faenas.update { listOf(faena) + it }
         return Result.success(Unit)
     }
 
-    fun completarFaena(faenaId: String): Result<Unit> {
-        val index = _faenas.value.indexOfFirst { it.id == faenaId }
-        return if (index != -1) {
+    /**
+     * Finaliza la faena solo si la propia faena lo permite (ver [RegistroFaena.pendientes]).
+     * Si falta algo, devuelve un [FaenaIncompletaException] con la lista de pendientes.
+     */
+    fun completarFaena(faenaId: String): Result<RegistroFaena> {
+        val faena = _faenas.value.firstOrNull { it.id == faenaId }
+            ?: return Result.failure(NoSuchElementException("Faena no encontrada"))
+
+        return faena.finalizar(avanceDe(faena)).onSuccess { finalizada ->
             _faenas.update { lista ->
-                lista.map {
-                    if (it.id == faenaId) it.copy(estado = "Completada con Éxito") else it
-                }
+                lista.map { if (it.id == faenaId) finalizada else it }
             }
-            Result.success(Unit)
-        } else {
-            Result.failure(NoSuchElementException("Faena no encontrada"))
         }
+    }
+
+    private fun actualizarFaena(
+        faenaId: String,
+        cambio: (RegistroFaena) -> Result<RegistroFaena>
+    ): Result<RegistroFaena> {
+        val faena = _faenas.value.firstOrNull { it.id == faenaId }
+            ?: return Result.failure(NoSuchElementException("Faena no encontrada"))
+        return cambio(faena).onSuccess { nueva ->
+            _faenas.update { lista -> lista.map { if (it.id == faenaId) nueva else it } }
+        }
+    }
+
+    private fun nombrePrevencionistaActivo(): String =
+        _prevencionistaActivo.value?.nombre ?: "Prevencionista"
+
+    /** Aprueba que los datos de la faena son correctos (queda registrado quién y cuándo). */
+    fun aprobarDatosFaena(faenaId: String): Result<RegistroFaena> =
+        actualizarFaena(faenaId) { it.aprobar(nombrePrevencionistaActivo(), obtenerFechaHoraActual()) }
+
+    fun revocarAprobacionFaena(faenaId: String): Result<RegistroFaena> =
+        actualizarFaena(faenaId) { it.revocarAprobacion() }
+
+    /** Corrige los datos de la faena; si algo cambia, la aprobación se anula. */
+    fun editarDatosFaena(
+        faenaId: String,
+        centro: String,
+        tipo: String,
+        profundidad: Int?,
+        minutos: Int?
+    ): Result<RegistroFaena> =
+        actualizarFaena(faenaId) { it.conDatos(centro, tipo, profundidad, minutos) }
+
+    /**
+     * Registra la encuesta de salud de una faena en el [momento] indicado, solo si la propia
+     * faena lo permite (ver [RegistroFaena.bloqueoEncuesta]). Si ya había una, la reemplaza.
+     * También deja el último resultado en la ficha del buzo.
+     */
+    fun registrarEncuestaSalud(
+        faenaId: String,
+        momento: MomentoSalud,
+        esApto: Boolean,
+        presionArterial: String,
+        frecuenciaCardiaca: Int
+    ): Result<EncuestaSalud> {
+        val faena = _faenas.value.firstOrNull { it.id == faenaId }
+            ?: return Result.failure(NoSuchElementException("Faena no encontrada"))
+
+        val bloqueo = faena.bloqueoEncuesta(momento, avanceDe(faena))
+        if (bloqueo != null) {
+            return Result.failure(IllegalStateException(bloqueo))
+        }
+
+        val encuesta = EncuestaSalud(
+            faenaId = faenaId,
+            momento = momento,
+            esApto = esApto,
+            presionArterial = presionArterial,
+            frecuenciaCardiaca = frecuenciaCardiaca,
+            registradaPor = nombrePrevencionistaActivo(),
+            registradaEn = obtenerFechaHoraActual()
+        )
+        _encuestas.update { it + ((faenaId to momento) to encuesta) }
+        actualizarSaludBuzo(
+            buzoId = faena.buzoId,
+            nuevoEstado = if (esApto) EstadoSalud.APTO else EstadoSalud.NO_APTO,
+            ultimoChequeo = "${momento.etiqueta} ($faenaId) - PA: $presionArterial mmHg, Pulso: $frecuenciaCardiaca lpm"
+        )
+        return Result.success(encuesta)
     }
 
     fun obtenerFechaHoraActual(): String {
@@ -323,17 +496,4 @@ class AquaRepository private constructor() {
             }
         }
     }
-    // Dentro de AquaRepository
-    private val revisiones = mutableMapOf<Triple<String, EtapaComprobacion, String>, RevisionEquipo>()
-    private val etapasConfirmadas = mutableSetOf<Pair<String, EtapaComprobacion>>()
-
-    fun obtenerRevisiones(buzoId: String, etapa: EtapaComprobacion): List<RevisionEquipo> =
-        revisiones.filterKeys { it.first == buzoId && it.second == etapa }.values.toList()
-
-    fun guardarRevision(buzoId: String, etapa: EtapaComprobacion, revision: RevisionEquipo) {
-        revisiones[Triple(buzoId, etapa, revision.equipoId)] = revision
-    }
-
-    fun confirmarEtapa(buzoId: String, etapa: EtapaComprobacion) {
-        etapasConfirmadas += buzoId to etapa
-    }}
+}

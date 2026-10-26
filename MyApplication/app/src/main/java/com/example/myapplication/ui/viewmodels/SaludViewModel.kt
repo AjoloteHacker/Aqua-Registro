@@ -5,18 +5,29 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.AppData
 import com.example.myapplication.data.Chequeo
 import com.example.myapplication.data.model.Buzo
-import com.example.myapplication.data.model.EstadoSalud
+import com.example.myapplication.data.model.EncuestaSalud
+import com.example.myapplication.data.model.MomentoSalud
+import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.data.repository.DestinoRevision
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 data class SaludUiState(
     val buzos: List<Buzo> = emptyList(),
-    val buzoSeleccionadoId: String? = null,
+    /** Faenas en curso: la encuesta se registra por faena y por momento (ANTES / DESPUÉS). */
+    val faenas: List<RegistroFaena> = emptyList(),
+    val faenaSeleccionadaId: String? = null,
+    val momento: MomentoSalud = MomentoSalud.ANTES,
+    /** Motivo por el que aún no se puede registrar la encuesta (null = habilitada). */
+    val bloqueo: String? = null,
+    /** Encuesta ya registrada para la faena y el momento seleccionados (si existe). */
+    val encuestaRegistrada: EncuestaSalud? = null,
 
     // Signos vitales
     val presionArterial: String = "120/80",
@@ -48,8 +59,11 @@ data class SaludUiState(
     val mostrarErrores: Boolean = false,
     val userMessage: String? = null
 ) {
+    val faenaSeleccionada: RegistroFaena?
+        get() = faenas.firstOrNull { it.id == faenaSeleccionadaId }
+
     val buzoSeleccionado: Buzo?
-        get() = buzos.firstOrNull { it.id == buzoSeleccionadoId }
+        get() = faenaSeleccionada?.let { faena -> buzos.firstOrNull { it.id == faena.buzoId } }
 
     // Rango médico
     val pulso: Int?
@@ -120,20 +134,68 @@ class SaludViewModel(
 
     init {
         viewModelScope.launch {
-            repository.buzos.collect { lista ->
-                val primerBuzoId = _uiState.value.buzoSeleccionadoId ?: lista.firstOrNull()?.id
-                _uiState.update {
-                    it.copy(
-                        buzos = lista,
-                        buzoSeleccionadoId = primerBuzoId
-                    )
+            combine(
+                repository.faenas,
+                repository.buzos,
+                repository.encuestas,
+                repository.revisiones,
+                repository.etapasConfirmadas
+            ) { faenas, buzos, _, _, _ -> faenas.filter { it.enCurso } to buzos }
+                .collect { (enCurso, buzos) -> sincronizar(enCurso, buzos) }
+        }
+        // Cuando Historial pide registrar la encuesta de una faena, se preselecciona aquí.
+        viewModelScope.launch {
+            repository.solicitudRevision.collect { solicitud ->
+                if (solicitud != null && solicitud.destino == DestinoRevision.SALUD) {
+                    _uiState.update {
+                        it.copy(
+                            faenaSeleccionadaId = solicitud.faenaId,
+                            momento = solicitud.momento ?: it.momento,
+                            userMessage = null
+                        )
+                    }
+                    repository.limpiarSolicitud(DestinoRevision.SALUD)
+                    recalcular()
                 }
             }
         }
     }
 
-    fun seleccionarBuzo(buzoId: String) {
-        _uiState.update { it.copy(buzoSeleccionadoId = buzoId, userMessage = null) }
+    fun seleccionarFaena(faenaId: String) {
+        _uiState.update { it.copy(faenaSeleccionadaId = faenaId, userMessage = null) }
+        recalcular()
+    }
+
+    fun seleccionarMomento(momento: MomentoSalud) {
+        _uiState.update { it.copy(momento = momento, userMessage = null) }
+        recalcular()
+    }
+
+    private fun sincronizar(enCurso: List<RegistroFaena>, buzos: List<Buzo>) {
+        _uiState.update { s ->
+            val seleccionada = s.faenaSeleccionadaId
+                ?.takeIf { id -> enCurso.any { it.id == id } }
+                ?: enCurso.firstOrNull()?.id
+            s.copy(buzos = buzos, faenas = enCurso, faenaSeleccionadaId = seleccionada)
+        }
+        recalcular()
+    }
+
+    /** Qué momento está habilitado y qué encuesta ya existe, según lo que dice la propia faena. */
+    private fun recalcular() {
+        val s = _uiState.value
+        val faena = s.faenaSeleccionada
+        if (faena == null) {
+            _uiState.update { it.copy(bloqueo = null, encuestaRegistrada = null) }
+            return
+        }
+        val avance = repository.avanceDe(faena)
+        _uiState.update {
+            it.copy(
+                bloqueo = faena.bloqueoEncuesta(s.momento, avance),
+                encuestaRegistrada = avance.encuestas[s.momento]
+            )
+        }
     }
 
     // Mutadores signos vitales
@@ -168,9 +230,14 @@ class SaludViewModel(
 
     fun guardarDictamen() {
         val state = _uiState.value
+        val faena = state.faenaSeleccionada
         val buzo = state.buzoSeleccionado
-        if (buzo == null) {
-            _uiState.update { it.copy(userMessage = "Seleccione un buzo antes de registrar el chequeo.") }
+        if (faena == null || buzo == null) {
+            _uiState.update { it.copy(userMessage = "Seleccione una faena en curso antes de registrar la encuesta.") }
+            return
+        }
+        if (state.bloqueo != null) {
+            _uiState.update { it.copy(userMessage = state.bloqueo) }
             return
         }
 
@@ -190,11 +257,23 @@ class SaludViewModel(
             return
         }
 
-        val fechaChequeo = LocalDate.now()
+        // La faena decide si la encuesta puede registrarse (orden del flujo); el repositorio la guarda.
+        repository.registrarEncuestaSalud(
+            faenaId = faena.id,
+            momento = state.momento,
+            esApto = state.esApto,
+            presionArterial = state.presionArterial.trim(),
+            frecuenciaCardiaca = state.pulso!!
+        ).onFailure { error ->
+            _uiState.update { it.copy(userMessage = error.message ?: "No se pudo registrar la encuesta.") }
+            return
+        }
+
+        // Registro histórico del chequeo (igual que antes)
         val nuevoChequeo = Chequeo(
             id = "${AppData.chequeos.size + 1}",
             buzoRut = buzo.rut,
-            fecha = fechaChequeo,
+            fecha = LocalDate.now(),
             esApto = state.esApto,
             pesoKg = state.pesoVal!!,
             tallaM = state.tallaVal!!,
@@ -207,17 +286,12 @@ class SaludViewModel(
             presionArterial = state.presionArterial.trim(),
             frecuenciaCardiaca = state.pulso!!
         )
-
         AppData.chequeos.add(nuevoChequeo)
 
-        val nuevoEstado = if (state.esApto) EstadoSalud.APTO else EstadoSalud.NO_APTO
-        val detalle = "Hoy - PA: ${state.presionArterial} mmHg, Pulso: ${state.frecuenciaCardiaca} lpm"
-        repository.actualizarSaludBuzo(buzo.id, nuevoEstado, detalle)
-
         val mensaje = if (state.esApto) {
-            "Chequeo registrado: ${buzo.nombre} declarado APTO para inmersión."
+            "Encuesta (${state.momento.etiqueta}) de ${faena.id} registrada: ${buzo.nombre} declarado APTO."
         } else {
-            "Alerta: ${buzo.nombre} declarado NO APTO. Notificado a supervisor."
+            "Alerta: ${buzo.nombre} declarado NO APTO (${state.momento.etiqueta}, ${faena.id}). Notificado a supervisor."
         }
 
         _uiState.update {
