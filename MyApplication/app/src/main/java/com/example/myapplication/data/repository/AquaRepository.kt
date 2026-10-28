@@ -1,11 +1,21 @@
 package com.example.myapplication.data.repository
 
+import android.content.Context
+import com.example.myapplication.data.local.AppDatabase
+import com.example.myapplication.data.local.entity.BuzoEntity
+import com.example.myapplication.data.local.entity.EmpresaEntity
+import com.example.myapplication.data.local.entity.FaenaEntity
 import com.example.myapplication.data.model.*
+import com.example.myapplication.util.NetworkMonitor
 import com.example.myapplication.util.Rutificador
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -28,8 +38,13 @@ data class SolicitudRevision(
 
 /**
  * Repositorio central de la aplicación.
+ * Orquesta los flujos reactivos (StateFlow) y la persistencia local con Room (SQLite).
  */
 class AquaRepository private constructor() {
+
+    private var database: AppDatabase? = null
+    private var networkMonitor: NetworkMonitor? = null
+    private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // Catálogos
     private val _empresas = MutableStateFlow<List<String>>(
@@ -176,6 +191,54 @@ class AquaRepository private constructor() {
     )
     val faenas: StateFlow<List<RegistroFaena>> = _faenas.asStateFlow()
 
+    // Monitoreo de Red
+    private val _isNetworkConnected = MutableStateFlow(true)
+    val isNetworkConnected: StateFlow<Boolean> = _isNetworkConnected.asStateFlow()
+
+    /**
+     * Inicializa Room SQLite y el monitor de conectividad de red nativo.
+     */
+    fun setupDatabase(context: Context) {
+        if (database != null) return
+        val db = AppDatabase.getInstance(context)
+        database = db
+        val netMonitor = NetworkMonitor.getInstance(context)
+        networkMonitor = netMonitor
+
+        coroutineScope.launch {
+            netMonitor.isConnected.collect { online ->
+                _isNetworkConnected.value = online
+            }
+        }
+
+        coroutineScope.launch {
+            val buzoDao = db.buzoDao()
+            val faenaDao = db.faenaDao()
+            val empresaDao = db.empresaDao()
+
+            // 1. Inicializar empresas
+            if (empresaDao.count() == 0) {
+                empresaDao.insertAll(_empresas.value.map { EmpresaEntity(it) })
+            } else {
+                _empresas.value = empresaDao.getAllEmpresas().map { it.nombre }
+            }
+
+            // 2. Inicializar buzos
+            if (buzoDao.count() == 0) {
+                buzoDao.insertAll(_buzos.value.map { BuzoEntity.fromDomain(it) })
+            } else {
+                _buzos.value = buzoDao.getAllBuzos().map { it.toDomain() }
+            }
+
+            // 3. Inicializar faenas
+            if (faenaDao.count() == 0) {
+                faenaDao.insertAll(_faenas.value.map { FaenaEntity.fromDomain(it) })
+            } else {
+                _faenas.value = faenaDao.getAllFaenas().map { it.toDomain() }
+            }
+        }
+    }
+
     // Autenticación
     fun login(rutOCorreo: String, contrasena: String): Result<Prevencionista> {
         val entrada = rutOCorreo.trim()
@@ -231,7 +294,7 @@ class AquaRepository private constructor() {
         _prevencionistaActivo.value = null
     }
 
-    // Buzos
+    // Buzos con persistencia Room
     fun agregarBuzo(buzo: Buzo): Result<Buzo> {
         val rutLimpio = Rutificador.limpiar(buzo.rut)
         val existe = _buzos.value.any { Rutificador.limpiar(it.rut) == rutLimpio }
@@ -244,6 +307,12 @@ class AquaRepository private constructor() {
             nombre = buzo.nombre.trim()
         )
         _buzos.update { it + buzoFormateado }
+
+        // Persistir en Room (SQLite)
+        coroutineScope.launch {
+            database?.buzoDao()?.insertOrUpdate(BuzoEntity.fromDomain(buzoFormateado))
+        }
+
         return Result.success(buzoFormateado)
     }
 
@@ -252,6 +321,12 @@ class AquaRepository private constructor() {
         return if (index != -1) {
             _buzos.update { lista ->
                 lista.map { if (it.id == buzoId) it.copy(estadoSalud = nuevoEstado, ultimoChequeo = ultimoChequeo) else it }
+            }
+            val buzoActualizado = _buzos.value.firstOrNull { it.id == buzoId }
+            if (buzoActualizado != null) {
+                coroutineScope.launch {
+                    database?.buzoDao()?.insertOrUpdate(BuzoEntity.fromDomain(buzoActualizado))
+                }
             }
             Result.success(Unit)
         } else {
@@ -279,6 +354,12 @@ class AquaRepository private constructor() {
         _buzos.update { lista ->
             lista.map { if (it.id == buzo.id) buzoFormateado else it }
         }
+
+        // Persistir en Room (SQLite)
+        coroutineScope.launch {
+            database?.buzoDao()?.insertOrUpdate(BuzoEntity.fromDomain(buzoFormateado))
+        }
+
         return Result.success(buzoFormateado)
     }
 
@@ -296,6 +377,12 @@ class AquaRepository private constructor() {
 
         _buzos.update { lista -> lista.filterNot { it.id == buzoId } }
         _equiposPorBuzo.update { map -> map - buzoId }
+
+        // Eliminar en Room (SQLite)
+        coroutineScope.launch {
+            database?.buzoDao()?.deleteById(buzoId)
+        }
+
         return Result.success(Unit)
     }
 
@@ -308,6 +395,12 @@ class AquaRepository private constructor() {
             return Result.success(limpia)
         }
         _empresas.update { it + limpia }
+
+        // Persistir en Room (SQLite)
+        coroutineScope.launch {
+            database?.empresaDao()?.insert(EmpresaEntity(limpia))
+        }
+
         return Result.success(limpia)
     }
 
@@ -362,7 +455,7 @@ class AquaRepository private constructor() {
         return obtenerEquiposParaBuzo(faena.buzoId).map { eq ->
             guardadas[eq.id] ?: RevisionEquipo(
                 equipoId = eq.id,
-                categoria = "General", // EquipoChequeo aún no tiene categoría
+                categoria = "General",
                 nombre = eq.nombre,
                 descripcionUso = eq.descripcion
             )
@@ -391,9 +484,12 @@ class AquaRepository private constructor() {
         )
     }
 
-    // Faenas e Inmersiones
+    // Faenas e Inmersiones con persistencia Room
     fun autorizarFaena(faena: RegistroFaena): Result<Unit> {
         _faenas.update { listOf(faena) + it }
+        coroutineScope.launch {
+            database?.faenaDao()?.insertOrUpdate(FaenaEntity.fromDomain(faena))
+        }
         return Result.success(Unit)
     }
 
@@ -409,6 +505,9 @@ class AquaRepository private constructor() {
             _faenas.update { lista ->
                 lista.map { if (it.id == faenaId) finalizada else it }
             }
+            coroutineScope.launch {
+                database?.faenaDao()?.insertOrUpdate(FaenaEntity.fromDomain(finalizada))
+            }
         }
     }
 
@@ -420,6 +519,9 @@ class AquaRepository private constructor() {
             ?: return Result.failure(NoSuchElementException("Faena no encontrada"))
         return cambio(faena).onSuccess { nueva ->
             _faenas.update { lista -> lista.map { if (it.id == faenaId) nueva else it } }
+            coroutineScope.launch {
+                database?.faenaDao()?.insertOrUpdate(FaenaEntity.fromDomain(nueva))
+            }
         }
     }
 
@@ -444,8 +546,7 @@ class AquaRepository private constructor() {
         actualizarFaena(faenaId) { it.conDatos(centro, tipo, profundidad, minutos) }
 
     /**
-     * Registra la encuesta de salud de una faena en el [momento] indicado, solo si la propia
-     * faena lo permite (ver [RegistroFaena.bloqueoEncuesta]). Si ya había una, la reemplaza.
+     * Registra la encuesta de salud de una faena en el [momento] indicado.
      * También deja el último resultado en la ficha del buzo.
      */
     fun registrarEncuestaSalud(
@@ -489,6 +590,11 @@ class AquaRepository private constructor() {
     companion object {
         @Volatile
         private var INSTANCE: AquaRepository? = null
+
+        fun init(context: Context) {
+            val repo = getInstance()
+            repo.setupDatabase(context)
+        }
 
         fun getInstance(): AquaRepository {
             return INSTANCE ?: synchronized(this) {

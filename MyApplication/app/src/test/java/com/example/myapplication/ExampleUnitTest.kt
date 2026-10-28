@@ -178,6 +178,7 @@ class ExampleUnitTest {
         val faenaId = "F-TEST-${System.currentTimeMillis()}"
         val faena = RegistroFaena(
             id = faenaId,
+            buzoId = "1",
             buzoNombre = "Carlos Soto Paredes",
             empresa = "Servicios Submarinos Austral SpA",
             centroCultivo = "Centro Melinka 1 - Canal Moraleda",
@@ -192,11 +193,9 @@ class ExampleUnitTest {
         assertTrue(resultadoAutorizar.isSuccess)
         assertTrue(repository.faenas.value.any { it.id == faenaId && it.estado == "Autorizada y en Curso" })
 
-        val resultadoCompletar = repository.completarFaena(faenaId)
-        assertTrue(resultadoCompletar.isSuccess)
-
-        val faenaCompletada = repository.faenas.value.first { it.id == faenaId }
-        assertEquals("Completada con Éxito", faenaCompletada.estado)
+        // Completar faena sin cumplir etapas previas debe bloquearse por seguridad (FaenaIncompletaException)
+        val resultadoCompletarIncompleta = repository.completarFaena(faenaId)
+        assertTrue(resultadoCompletarIncompleta.isFailure)
     }
 
     @Test
