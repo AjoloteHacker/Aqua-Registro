@@ -6,7 +6,7 @@
 
 ---
 
-## 👥 Integrantes del Equipo (Smiling Friends)
+## Integrantes del Equipo (Smiling Friends)
 
 | Nombre y Apellido | Rol dentro del Equipo | Responsabilidad Principal |
 | :--- | :--- | :--- |
@@ -17,7 +17,7 @@
 
 ---
 
-## 📱 Funcionalidades Principales del MVP
+##  Funcionalidades Principales del MVP
 
 1. **Autenticación y Registro de Prevencionistas:**
    * Validación estricta de formato y dígito verificador del RUT chileno (Módulo 11).
@@ -46,7 +46,7 @@
 
 ---
 
-## 🏗️ Arquitectura de Software: MVVM + UDF + Room (SQLite)
+##  Arquitectura de Software: MVVM + UDF + Room (SQLite)
 
 La aplicación sigue fielmente la arquitectura **MVVM (Model-View-ViewModel)** recomendada oficialmente por Android y Google, garantizando desacoplamiento total y flujo unidireccional de datos (UDF):
 
@@ -103,7 +103,7 @@ graph TD
 
 ---
 
-## 📲 Recursos Nativos del Dispositivo Integrados
+##  Recursos Nativos del Dispositivo Integrados
 
 Cumpliendo con el requerimiento de integrar **al menos 2 recursos nativos del dispositivo**:
 
@@ -114,7 +114,7 @@ Cumpliendo con el requerimiento de integrar **al menos 2 recursos nativos del di
 
 ---
 
-## 🎨 Identidad Visual (Material Design 3)
+##  Identidad Visual (Material Design 3)
 * **Principal:** Azul Claro (`#0099FF`) — Barras superiores, botones primarios y branding institucional AquaChile.
 * **Secundario:** Verde Agua (`#00CCCC`) — Acentos marinos y botones de acción afirmativa.
 * **Fondo:** Blanco Hielo (`#F6F9FD`) — Reducción de fatiga visual bajo la luz solar marina en cubierta.
@@ -123,7 +123,7 @@ Cumpliendo con el requerimiento de integrar **al menos 2 recursos nativos del di
 
 ---
 
-## 🗺️ Flujo Operativo del Prevencionista (UML)
+##  Flujo Operativo del Prevencionista (UML)
 
 ```mermaid
 stateDiagram-v2
@@ -152,7 +152,7 @@ stateDiagram-v2
 
 ---
 
-## 📋 Planificación del Proyecto (Trello)
+##  Planificación del Proyecto (Trello)
 
 El avance de tareas, historias de usuario, asignación de responsabilidades y trazabilidad de pendientes se gestiona mediante el tablero oficial del equipo en **Trello**:
 * **Tablero Trello del Proyecto:** [Aqua-Registro — Sprint Planning & Tareas](https://trello.com/b/aqua-registro-smiling-friends) *(o enlace a herramienta colaborativa equivalente)*
@@ -160,7 +160,7 @@ El avance de tareas, historias de usuario, asignación de responsabilidades y tr
 
 ---
 
-## 🚀 Instrucciones de Instalación y Ejecución
+##  Instrucciones de Instalación y Ejecución
 
 ### Requisitos Previos:
 * **Android Studio:** Ladybug (2024.2) o superior.
@@ -190,7 +190,7 @@ El avance de tareas, historias de usuario, asignación de responsabilidades y tr
 
 ---
 
-## 🧪 Credenciales de Prueba para Evaluación
+##  Credenciales de Prueba para Evaluación
 * **RUT Prevencionista:** `12.345.678-5`
 * **Contraseña:** `admin123`
 *(También es posible registrar un nuevo prevencionista en la pestaña "Nuevo Registro" con cualquier RUT chileno válido).*
