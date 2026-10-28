@@ -27,7 +27,7 @@ graph TD
 
     Screens -->|Eventos de Usuario / Intents| VM
     VM -->|Actualiza / Emite| UiState
-    UiState -->|StateFlow .collectAsState()| Screens
+    UiState -->|"StateFlow .collectAsState()"| Screens
     VM -->|Llamadas a Casos de Uso / Métodos| Repo
     Repo -->|StateFlow Data Streams| VM
     Repo -->|Manipula modelos inmutables| Models
