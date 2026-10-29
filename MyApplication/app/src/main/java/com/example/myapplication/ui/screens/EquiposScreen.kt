@@ -114,7 +114,7 @@ fun EquiposScreen(
     ) { paddingValues ->
         ChecklistEquiposContent(
             uiState = uiState,
-            onSeleccionarBuzo = viewModel::seleccionarBuzo,
+            onSeleccionarFaena = viewModel::seleccionarFaena,
             onSeleccionarEtapa = viewModel::seleccionarEtapa,
             onEstadoChange = viewModel::actualizarEstado,
             onDescripcionChange = viewModel::actualizarDescripcion,
@@ -127,13 +127,13 @@ fun EquiposScreen(
 }
 
 // ───────────────────────── Contenido reutilizable ─────────────────────────
-// Sin dependencia de la faena: sirve también para post-faena o comprobaciones sueltas.
+// Cada faena en curso tiene su propio checklist y evidencia (por etapa).
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChecklistEquiposContent(
     uiState: EquiposUiState,
-    onSeleccionarBuzo: (String) -> Unit,
+    onSeleccionarFaena: (String) -> Unit,
     onSeleccionarEtapa: (EtapaComprobacion) -> Unit,
     onEstadoChange: (equipoId: String, EstadoEquipo) -> Unit,
     onDescripcionChange: (equipoId: String, String) -> Unit,
@@ -165,6 +165,11 @@ fun ChecklistEquiposContent(
         }
     }
 ) {
+    if (uiState.faenas.isEmpty()) {
+        SinFaenasEnCurso(modifier)
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -184,15 +189,24 @@ fun ChecklistEquiposContent(
 
         Spacer(Modifier.height(10.dp))
 
-        // Buzos de la faena
-        Text("Buzo", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AquaTextPrimary)
+        // Faenas en curso
+        Text("Faena en curso", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AquaTextPrimary)
         Spacer(Modifier.height(4.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(uiState.buzos, key = { it.id }) { buzo ->
+            items(uiState.faenas, key = { it.id }) { faena ->
                 FilterChip(
-                    selected = buzo.id == uiState.buzoSeleccionadoId,
-                    onClick = { onSeleccionarBuzo(buzo.id) },
-                    label = { Text("🤿 ${buzo.nombre} (${buzo.equiposCompletos}/${buzo.totalEquipos})") }
+                    selected = faena.id == uiState.faenaSeleccionadaId,
+                    onClick = { onSeleccionarFaena(faena.id) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ScubaDiving,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    label = {
+                        Text("${faena.id} · ${faena.buzoNombre} (${faena.equiposCompletos}/${faena.totalEquipos})")
+                    }
                 )
             }
         }
@@ -429,4 +443,29 @@ private fun EstadoBadge(equipo: RevisionEquipo) {
             .background(color.copy(alpha = 0.12f))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     )
+}
+
+// ───────────────────────── Sin faenas ─────────────────────────
+
+@Composable
+private fun SinFaenasEnCurso(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(AquaBackground)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Default.Info, contentDescription = null, tint = AquaPrimary, modifier = Modifier.size(40.dp))
+            Spacer(Modifier.height(8.dp))
+            Text("No hay faenas en curso", fontWeight = FontWeight.Bold, color = AquaTextPrimary)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Autoriza una faena en «Registro de Faena» para registrar la revisión de sus equipos.",
+                fontSize = 12.sp,
+                color = AquaTextSecondary
+            )
+        }
+    }
 }

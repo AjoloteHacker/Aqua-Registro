@@ -1,4 +1,5 @@
--Arreglar la barra lateral y eliminar la barra de abajo
--Agregar mas seguridad a la hora de registrar usuario
--Agregar Rutificador reutilizable
-
+-Cambiar Emojis por Iconos
+-Colorar logo de Aqua Chile
+-Implementar API random User para las fotos de los trabajadores
+-en la encuesta cambiar teclado por rueda para seleccionar el peso y estatura
+-Historial de registro medico y quien autorizo la faena

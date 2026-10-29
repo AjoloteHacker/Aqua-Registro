@@ -134,6 +134,12 @@ fun AquaRegistroApp(
                     onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
                 )
             }
+            composable(Screen.Empresas.route) {
+                EmpresaScreen(
+                    navController = navController,
+                    onOpenDrawer = { coroutineScope.launch { drawerState.open() } }
+                )
+            }
         }
     }
 }

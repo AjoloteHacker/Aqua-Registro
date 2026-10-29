@@ -2,60 +2,32 @@ package com.example.myapplication.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.data.model.Buzo
+import com.example.myapplication.data.model.EstadoEquipo
+import com.example.myapplication.data.model.EtapaComprobacion
+import com.example.myapplication.data.model.RegistroFaena
+import com.example.myapplication.data.model.RevisionEquipo
 import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.data.repository.DestinoRevision
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.example.myapplication.data.model.EstadoEquipo
-import com.example.myapplication.data.model.EtapaComprobacion
-import com.example.myapplication.data.model.RevisionEquipo
 
-// ───────────────────────── Modelo ─────────────────────────
+// ───────────────────────── Modelo de UI ─────────────────────────
 
-enum class EstadoEquipo(val etiqueta: String) {
-    SIN_REVISAR("Sin revisar"),
-    ACEPTABLE("Aceptable"),
-    UTILIZABLE_RIESGOSO("Riesgoso"),
-    INUTILIZABLE("Inutilizable")
-}
-
-enum class EtapaComprobacion(val etiqueta: String) {
-    PRE_EQUIPACION("Pre-equipación"),
-    EQUIPADO("Equipado")
-}
-
-data class RevisionEquipo(
-    val equipoId: String,
-    val categoria: String,
-    val nombre: String,
-    val descripcionUso: String,
-    val estado: EstadoEquipo = EstadoEquipo.SIN_REVISAR,
-    val descripcionEstado: String = "",
-    val fotoUri: String? = null,
-    val registradoEn: Long? = null
-) {
-    val tieneEstado get() = estado != EstadoEquipo.SIN_REVISAR
-    val esCorroborable get() = tieneEstado && fotoUri != null
-    val estaCompleto get() = esCorroborable &&
-            (estado == EstadoEquipo.ACEPTABLE || descripcionEstado.isNotBlank())
-    val faltaFoto get() = tieneEstado && fotoUri == null
-    val faltaDescripcion get() = tieneEstado && estado != EstadoEquipo.ACEPTABLE && descripcionEstado.isBlank()
-}
-
-data class BuzoRevision(
+/** Faena en curso que se puede revisar, con el avance de la etapa seleccionada. */
+data class FaenaRevision(
     val id: String,
-    val nombre: String,
-    val empresa: String,
+    val buzoNombre: String,
+    val tipoFaena: String,
     val equiposCompletos: Int,
     val totalEquipos: Int
 )
 
 data class EquiposUiState(
-    val buzos: List<BuzoRevision> = emptyList(),
-    val buzoSeleccionadoId: String? = null,
+    val faenas: List<FaenaRevision> = emptyList(),
+    val faenaSeleccionadaId: String? = null,
     val etapa: EtapaComprobacion = EtapaComprobacion.PRE_EQUIPACION,
     val equipos: List<RevisionEquipo> = emptyList(),
     val userMessage: String? = null
@@ -72,6 +44,10 @@ data class EquiposUiState(
 
 // ───────────────────────── ViewModel ─────────────────────────
 
+/**
+ * Control de equipos por FAENA: cada faena en curso tiene su propio checklist,
+ * evidencia y etapas confirmadas (no se heredan de faenas anteriores del mismo buzo).
+ */
 class EquiposViewModel(
     private val repository: AquaRepository = AquaRepository.getInstance()
 ) : ViewModel() {
@@ -79,23 +55,32 @@ class EquiposViewModel(
     private val _uiState = MutableStateFlow(EquiposUiState())
     val uiState: StateFlow<EquiposUiState> = _uiState.asStateFlow()
 
-    private var listaBuzos: List<Buzo> = emptyList()
+    private var faenasEnCurso: List<RegistroFaena> = emptyList()
 
     init {
         viewModelScope.launch {
-            repository.buzos.collect { lista ->
-                listaBuzos = lista
-                val seleccionado = _uiState.value.buzoSeleccionadoId
-                    ?.takeIf { id -> lista.any { it.id == id } }
-                    ?: lista.firstOrNull()?.id
-                _uiState.update { it.copy(buzoSeleccionadoId = seleccionado) }
+            repository.faenas.collect { lista ->
+                faenasEnCurso = lista.filter { it.enCurso }
+                val seleccionada = _uiState.value.faenaSeleccionadaId
+                    ?.takeIf { id -> faenasEnCurso.any { it.id == id } }
+                    ?: faenasEnCurso.firstOrNull()?.id
+                _uiState.update { it.copy(faenaSeleccionadaId = seleccionada) }
                 recargar()
+            }
+        }
+        // Cuando Historial pide revisar una faena concreta, se preselecciona aquí.
+        viewModelScope.launch {
+            repository.solicitudRevision.collect { solicitud ->
+                if (solicitud != null && solicitud.destino == DestinoRevision.EQUIPOS) {
+                    seleccionarFaena(solicitud.faenaId)
+                    repository.limpiarSolicitud(DestinoRevision.EQUIPOS)
+                }
             }
         }
     }
 
-    fun seleccionarBuzo(buzoId: String) {
-        _uiState.update { it.copy(buzoSeleccionadoId = buzoId, userMessage = null) }
+    fun seleccionarFaena(faenaId: String) {
+        _uiState.update { it.copy(faenaSeleccionadaId = faenaId, userMessage = null) }
         recargar()
     }
 
@@ -124,10 +109,11 @@ class EquiposViewModel(
     /** Todo ya está persistido; esto solo informa al usuario del estado del avance. */
     fun guardarAvance() {
         val s = _uiState.value
-        val buzo = listaBuzos.firstOrNull { it.id == s.buzoSeleccionadoId }?.nombre ?: "Buzo"
+        val faena = faenasEnCurso.firstOrNull { it.id == s.faenaSeleccionadaId }
+        val etiqueta = faena?.let { "${it.id} (${it.buzoNombre})" } ?: "la faena"
         _uiState.update {
             it.copy(
-                userMessage = "Avance de $buzo guardado (${s.completos}/${s.equipos.size} completos, " +
+                userMessage = "Avance de $etiqueta guardado (${s.completos}/${s.equipos.size} completos, " +
                         "${s.corroborables} con evidencia). Debes completar el resto más tarde."
             )
         }
@@ -135,12 +121,12 @@ class EquiposViewModel(
 
     fun confirmarEtapa() {
         val s = _uiState.value
-        val buzoId = s.buzoSeleccionadoId ?: return
+        val faenaId = s.faenaSeleccionadaId ?: return
         if (!s.todoCompleto) {
             _uiState.update { it.copy(userMessage = "Faltan equipos por completar.") }
             return
         }
-        repository.confirmarEtapa(buzoId, s.etapa)
+        repository.confirmarEtapa(faenaId, s.etapa)
         _uiState.update { it.copy(userMessage = "${s.etapa.etiqueta} confirmada.") }
     }
 
@@ -152,32 +138,22 @@ class EquiposViewModel(
 
     private fun modificar(equipoId: String, cambio: (RevisionEquipo) -> RevisionEquipo) {
         val s = _uiState.value
-        val buzoId = s.buzoSeleccionadoId ?: return
+        val faenaId = s.faenaSeleccionadaId ?: return
         val actual = s.equipos.firstOrNull { it.equipoId == equipoId } ?: return
-        repository.guardarRevision(buzoId, s.etapa, cambio(actual)) // persiste al instante
+        repository.guardarRevision(faenaId, s.etapa, cambio(actual)) // persiste al instante
         recargar()
     }
 
     private fun recargar() {
         val s = _uiState.value
-        val buzos = listaBuzos.map { b ->
-            val items = combinar(b.id, s.etapa)
-            BuzoRevision(b.id, b.nombre, b.empresa, items.count { it.estaCompleto }, items.size)
+        val faenas = faenasEnCurso.map { f ->
+            val items = repository.revisionesCombinadas(f, s.etapa)
+            FaenaRevision(f.id, f.buzoNombre, f.tipoFaena, items.count { it.estaCompleto }, items.size)
         }
-        val equipos = s.buzoSeleccionadoId?.let { combinar(it, s.etapa) } ?: emptyList()
-        _uiState.update { it.copy(buzos = buzos, equipos = equipos) }
-    }
-
-    /** Catálogo del buzo + revisiones guardadas para la etapa. Sin revisión => SIN_REVISAR. */
-    private fun combinar(buzoId: String, etapa: EtapaComprobacion): List<RevisionEquipo> {
-        val guardadas = repository.obtenerRevisiones(buzoId, etapa).associateBy { it.equipoId }
-        return repository.obtenerEquiposParaBuzo(buzoId).map { eq ->
-            guardadas[eq.id] ?: RevisionEquipo(
-                equipoId = eq.id,
-                categoria = "General", // EquipoChequeo aún no tiene categoría
-                nombre = eq.nombre,
-                descripcionUso = eq.descripcion
-            )
-        }
+        val equipos = faenasEnCurso
+            .firstOrNull { it.id == s.faenaSeleccionadaId }
+            ?.let { repository.revisionesCombinadas(it, s.etapa) }
+            ?: emptyList()
+        _uiState.update { it.copy(faenas = faenas, equipos = equipos) }
     }
 }

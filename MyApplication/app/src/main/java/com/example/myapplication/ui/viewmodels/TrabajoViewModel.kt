@@ -63,7 +63,7 @@ class TrabajoViewModel(
             repository.prevencionistaActivo.collect { prev ->
                 if (prev != null) {
                     _uiState.update {
-                        it.copy(supervisor = "${prev.nombre} (Prevencionista)")
+                        it.copy(supervisor = "${prev.nombre} (SEREMI: ${prev.registroSeremi})")
                     }
                 }
             }
@@ -101,15 +101,8 @@ class TrabajoViewModel(
             return
         }
 
-        if (buzo.estadoSalud != EstadoSalud.APTO) {
-            _uiState.update {
-                it.copy(
-                    errorMessage = "Acción bloqueada: El buzo '${buzo.nombre}' no se encuentra APTO. Complete la encuesta de salud antes de autorizar faenas submarinas.",
-                    userMessage = "No se puede autorizar inmersión a un buzo no apto."
-                )
-            }
-            return
-        }
+        // La aptitud de salud ya no se exige al autorizar: se evalúa por faena
+        // (encuesta ANTES con el buzo equipado y encuesta DESPUÉS al cerrar).
 
         val prof = state.profundidad.toIntOrNull() ?: 15
         val mins = state.duracionMinutos.toIntOrNull() ?: 30
@@ -118,6 +111,7 @@ class TrabajoViewModel(
 
         val nuevaFaena = RegistroFaena(
             id = nuevoFolio,
+            buzoId = buzo.id,
             buzoNombre = buzo.nombre,
             empresa = buzo.empresa,
             centroCultivo = state.centroCultivo,
@@ -125,7 +119,11 @@ class TrabajoViewModel(
             profundidadMetros = prof,
             tiempoMinutos = mins,
             fechaHora = fechaHoraActual,
-            estado = "Autorizada y en Curso"
+            estado = "Autorizada y en Curso",
+            autorizadoPor = state.supervisor.trim().ifBlank {
+                repository.prevencionistaActivo.value?.let { "${it.nombre} (SEREMI: ${it.registroSeremi})" }
+                    ?: "Prevencionista de Turno"
+            }
         )
 
         repository.autorizarFaena(nuevaFaena)

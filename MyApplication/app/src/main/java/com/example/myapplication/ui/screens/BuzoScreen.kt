@@ -20,11 +20,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.myapplication.data.model.Buzo
 import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.ui.components.AquaScaffold
@@ -250,6 +252,62 @@ fun BuzoScreen(
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
                     ) {
+                        // Generador de foto con Random User
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AquaPrimary.copy(alpha = 0.06f))
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AsyncImage(
+                                model = uiState.nuevaFotoUrl.ifBlank { "https://randomuser.me/api/portraits/men/1.jpg" },
+                                contentDescription = "Foto de perfil",
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(AquaPrimary.copy(alpha = 0.15f)),
+                                contentScale = ContentScale.Crop
+                            )
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Foto de Perfil (Random User)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AquaTextSecondary
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                OutlinedButton(
+                                    onClick = { viewModel.generarFotoAleatoria() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    enabled = !uiState.cargandoFoto
+                                ) {
+                                    if (uiState.cargandoFoto) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(14.dp),
+                                            strokeWidth = 2.dp,
+                                            color = AquaPrimary
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Cargando...", fontSize = 11.sp)
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Generar otra foto", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+
                         OutlinedTextField(
                             value = uiState.nuevoNombre,
                             onValueChange = { viewModel.onNuevoNombreChange(it) },
@@ -320,52 +378,38 @@ fun BuzoScreen(
                         )
 
                         // Selector de Empresa
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedButton(
-                                    onClick = { empresaDropdownExpanded = true },
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { empresaDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp)
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Empresa: ${uiState.empresaSeleccionada.take(20)}${if (uiState.empresaSeleccionada.length > 20) "..." else ""}",
-                                            fontSize = 13.sp,
-                                            color = AquaTextPrimary
-                                        )
-                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                                    }
-                                }
-                                DropdownMenu(
-                                    expanded = empresaDropdownExpanded,
-                                    onDismissRequest = { empresaDropdownExpanded = false }
-                                ) {
-                                    uiState.empresasDisponibles.forEach { emp ->
-                                        DropdownMenuItem(
-                                            text = { Text(emp) },
-                                            onClick = {
-                                                viewModel.onEmpresaSeleccionadaChange(emp)
-                                                empresaDropdownExpanded = false
-                                            }
-                                        )
-                                    }
+                                    Text(
+                                        text = "Empresa: ${uiState.empresaSeleccionada.take(20)}${if (uiState.empresaSeleccionada.length > 20) "..." else ""}",
+                                        fontSize = 13.sp,
+                                        color = AquaTextPrimary
+                                    )
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
                                 }
                             }
-                            Spacer(Modifier.width(6.dp))
-                            IconButton(
-                                onClick = { viewModel.openNuevaEmpresaDialog() },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(AquaSecondary.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                            DropdownMenu(
+                                expanded = empresaDropdownExpanded,
+                                onDismissRequest = { empresaDropdownExpanded = false }
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "Nueva Empresa", tint = AquaPrimary)
+                                uiState.empresasDisponibles.forEach { emp ->
+                                    DropdownMenuItem(
+                                        text = { Text(emp) },
+                                        onClick = {
+                                            viewModel.onEmpresaSeleccionadaChange(emp)
+                                            empresaDropdownExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
 
@@ -427,40 +471,6 @@ fun BuzoScreen(
             )
         }
 
-        // Diálogo para Registrar Nueva Empresa
-        if (uiState.showNuevaEmpresaDialog) {
-            AlertDialog(
-                onDismissRequest = { viewModel.closeNuevaEmpresaDialog() },
-                title = { Text("Nueva Empresa Contratista", fontWeight = FontWeight.Bold, color = AquaPrimary) },
-                text = {
-                    Column {
-                        Text("Ingresa el nombre de la empresa de buceo para añadirla a los registros:", fontSize = 13.sp)
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = uiState.nuevaEmpresaNombre,
-                            onValueChange = { viewModel.onNuevaEmpresaNombreChange(it) },
-                            label = { Text("Nombre de la empresa *") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { viewModel.guardarNuevaEmpresa() },
-                        colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
-                    ) {
-                        Text("Añadir Empresa")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.closeNuevaEmpresaDialog() }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
-
         // Diálogo Ficha Técnica / Detalle del Buzo
         uiState.buzoDetalle?.let { buzo ->
             AlertDialog(
@@ -470,20 +480,15 @@ fun BuzoScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
+                        AsyncImage(
+                            model = buzo.fotoUrl ?: "https://randomuser.me/api/portraits/men/${(buzo.id.hashCode().let { if (it < 0) -it else it } % 80) + 1}.jpg",
+                            contentDescription = "Foto de ${buzo.nombre}",
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(52.dp)
                                 .clip(CircleShape)
-                                .background(AquaPrimary.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = AquaPrimary,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
+                                .background(AquaPrimary.copy(alpha = 0.12f)),
+                            contentScale = ContentScale.Crop
+                        )
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(buzo.nombre, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = AquaTextPrimary)
@@ -636,20 +641,15 @@ fun BuzoCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
+                AsyncImage(
+                    model = buzo.fotoUrl ?: "https://randomuser.me/api/portraits/men/${(buzo.id.hashCode().let { if (it < 0) -it else it } % 80) + 1}.jpg",
+                    contentDescription = "Foto de ${buzo.nombre}",
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(46.dp)
                         .clip(CircleShape)
-                        .background(AquaPrimary.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Buzo",
-                        tint = AquaPrimary,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
+                        .background(AquaPrimary.copy(alpha = 0.12f)),
+                    contentScale = ContentScale.Crop
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 
@@ -762,18 +762,37 @@ fun BuzoCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "🏢 ${buzo.empresa}",
-                    fontSize = 12.sp,
-                    color = AquaTextSecondary
-                )
-                Text(
-                    text = "📞 ${buzo.telefono}",
-                    fontSize = 12.sp,
-                    color = AquaTextSecondary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CorporateFare,
+                        contentDescription = null,
+                        tint = AquaTextSecondary,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = buzo.empresa,
+                        fontSize = 12.sp,
+                        color = AquaTextSecondary
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Call,
+                        contentDescription = null,
+                        tint = AquaTextSecondary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = buzo.telefono,
+                        fontSize = 12.sp,
+                        color = AquaTextSecondary
+                    )
+                }
             }
         }
     }

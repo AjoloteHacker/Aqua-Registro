@@ -15,7 +15,11 @@ import com.example.myapplication.data.repository.AquaRepository
 data class Chequeo(
     val id: String,
     val buzoRut: String,
-    val fecha: LocalDate,
+    val buzoNombre: String = "",
+    val faenaId: String = "",
+    val momento: String = "Antes de la faena",
+    val fechaHora: String = "",
+    val fecha: LocalDate = LocalDate.now(),
     val esApto: Boolean,
     val pesoKg: Double,
     val tallaM: Double,
@@ -26,7 +30,8 @@ data class Chequeo(
     val hemograma: Boolean,
     val glicemiaBasal: Int,
     val presionArterial: String,
-    val frecuenciaCardiaca: Int
+    val frecuenciaCardiaca: Int,
+    val evaluadoPor: String = "Cristóbal Loncón C."
 )
 
 /**
@@ -50,7 +55,7 @@ object AppData {
     val faenas: List<RegistroFaena> get() = repository.faenas.value
     val usuarios: List<Prevencionista> get() = repository.usuarios.value
 
-    val chequeos = mutableStateListOf<Chequeo>()
+    val chequeos: List<Chequeo> get() = repository.historialMedico.value
 
     fun obtenerEquiposDefault(): List<EquipoChequeo> = repository.obtenerEquiposDefault()
 }

@@ -1,6 +1,8 @@
 package com.example.myapplication.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,7 +10,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,9 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.myapplication.R
 import com.example.myapplication.data.model.Prevencionista
 import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
@@ -51,20 +56,14 @@ fun AquaDrawerContent(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_aquachile_emblem),
+                        contentDescription = "AquaChile Emblem",
                         modifier = Modifier
                             .size(52.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.25f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.WaterDrop,
-                            contentDescription = "AquaChile",
-                            tint = Color.White,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Fit
+                    )
                     Spacer(modifier = Modifier.width(14.dp))
                     Column {
                         Text(
@@ -73,29 +72,44 @@ fun AquaDrawerContent(
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text = "Seguridad Submarina",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 12.sp
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_aquachile_white),
+                            contentDescription = "Logo AquaChile",
+                            modifier = Modifier.height(15.dp),
+                            contentScale = ContentScale.Fit
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                Text(
-                    text = usuario?.nombre ?: "Prevencionista de Turno",
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Text(
-                    text = "SEREMI: ${usuario?.registroSeremi ?: "S/R"} · ${usuario?.centro ?: "Base AquaChile"}",
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(
+                        model = usuario?.fotoUrl ?: "https://randomuser.me/api/portraits/men/75.jpg",
+                        contentDescription = "Foto ${usuario?.nombre}",
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .border(1.5.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = usuario?.nombre ?: "Prevencionista de Turno",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "SEREMI: ${usuario?.registroSeremi ?: "S/R"} · ${usuario?.centro ?: "Base AquaChile"}",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 11.sp,
+                            lineHeight = 13.sp
+                        )
+                    }
+                }
             }
         }
 
