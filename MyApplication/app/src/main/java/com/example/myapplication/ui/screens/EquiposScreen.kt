@@ -197,8 +197,15 @@ fun ChecklistEquiposContent(
                 FilterChip(
                     selected = faena.id == uiState.faenaSeleccionadaId,
                     onClick = { onSeleccionarFaena(faena.id) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.ScubaDiving,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
                     label = {
-                        Text("🤿 ${faena.id} · ${faena.buzoNombre} (${faena.equiposCompletos}/${faena.totalEquipos})")
+                        Text("${faena.id} · ${faena.buzoNombre} (${faena.equiposCompletos}/${faena.totalEquipos})")
                     }
                 )
             }

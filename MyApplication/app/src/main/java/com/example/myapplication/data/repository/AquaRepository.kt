@@ -1,6 +1,7 @@
 package com.example.myapplication.data.repository
 
 import android.content.Context
+import com.example.myapplication.data.Chequeo
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.entity.BuzoEntity
 import com.example.myapplication.data.local.entity.EmpresaEntity
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.time.LocalDate
 import java.util.Date
 import java.util.Locale
 
@@ -144,9 +146,83 @@ class AquaRepository private constructor() {
 
     // Encuestas de salud por faena y momento (ANTES / DESPUÉS)
     private val _encuestas =
-        MutableStateFlow<Map<Pair<String, MomentoSalud>, EncuestaSalud>>(emptyMap())
+        MutableStateFlow<Map<Pair<String, MomentoSalud>, EncuestaSalud>>(
+            mapOf(
+                ("F-101" to MomentoSalud.ANTES) to EncuestaSalud(
+                    faenaId = "F-101",
+                    momento = MomentoSalud.ANTES,
+                    esApto = true,
+                    presionArterial = "118/78",
+                    frecuenciaCardiaca = 68,
+                    registradaPor = "Cristóbal Loncón C.",
+                    registradaEn = "15/09/2026 08:45"
+                ),
+                ("F-101" to MomentoSalud.DESPUES) to EncuestaSalud(
+                    faenaId = "F-101",
+                    momento = MomentoSalud.DESPUES,
+                    esApto = true,
+                    presionArterial = "122/80",
+                    frecuenciaCardiaca = 74,
+                    registradaPor = "Cristóbal Loncón C.",
+                    registradaEn = "15/09/2026 09:50"
+                )
+            )
+        )
     val encuestas: StateFlow<Map<Pair<String, MomentoSalud>, EncuestaSalud>> =
         _encuestas.asStateFlow()
+
+    // Historial de registros médicos detallados (Chequeos biomédicos y antropométricos)
+    private val _historialMedico = MutableStateFlow<List<Chequeo>>(
+        listOf(
+            Chequeo(
+                id = "CH-102",
+                buzoRut = "15.489.231-1",
+                buzoNombre = "Carlos Soto Paredes",
+                faenaId = "F-101",
+                momento = MomentoSalud.DESPUES.etiqueta,
+                fechaHora = "15/09/2026 09:50",
+                fecha = LocalDate.now(),
+                esApto = true,
+                pesoKg = 81.0,
+                tallaM = 1.76,
+                colesterolTotal = 185,
+                hdl = 52,
+                ldl = 110,
+                trigliceridos = 128,
+                hemograma = true,
+                glicemiaBasal = 91,
+                presionArterial = "122/80",
+                frecuenciaCardiaca = 74,
+                evaluadoPor = "Cristóbal Loncón C. (SEREMI: PR-10892-X)"
+            ),
+            Chequeo(
+                id = "CH-101",
+                buzoRut = "15.489.231-1",
+                buzoNombre = "Carlos Soto Paredes",
+                faenaId = "F-101",
+                momento = MomentoSalud.ANTES.etiqueta,
+                fechaHora = "15/09/2026 08:45",
+                fecha = LocalDate.now(),
+                esApto = true,
+                pesoKg = 81.0,
+                tallaM = 1.76,
+                colesterolTotal = 185,
+                hdl = 52,
+                ldl = 110,
+                trigliceridos = 128,
+                hemograma = true,
+                glicemiaBasal = 91,
+                presionArterial = "118/78",
+                frecuenciaCardiaca = 68,
+                evaluadoPor = "Cristóbal Loncón C. (SEREMI: PR-10892-X)"
+            )
+        )
+    )
+    val historialMedico: StateFlow<List<Chequeo>> = _historialMedico.asStateFlow()
+
+    fun registrarChequeoMedico(chequeo: Chequeo) {
+        _historialMedico.update { listOf(chequeo) + it }
+    }
 
     // Pedido "revisa esta faena" (Historial -> Control de Equipos / Encuesta de Salud)
     private val _solicitudRevision = MutableStateFlow<SolicitudRevision?>(null)
@@ -173,7 +249,12 @@ class AquaRepository private constructor() {
                 profundidadMetros = 18,
                 tiempoMinutos = 40,
                 fechaHora = "15/09/2026 09:00",
-                estado = RegistroFaena.ESTADO_COMPLETADA
+                estado = RegistroFaena.ESTADO_COMPLETADA,
+                autorizadoPor = "Cristóbal Loncón C. (SEREMI: PR-10892-X)",
+                aprobacion = AprobacionDatos(
+                    aprobadoPor = "Cristóbal Loncón C.",
+                    fechaHora = "15/09/2026 09:40"
+                )
             ),
             RegistroFaena(
                 id = "F-102",
@@ -185,7 +266,8 @@ class AquaRepository private constructor() {
                 profundidadMetros = 22,
                 tiempoMinutos = 35,
                 fechaHora = "15/09/2026 10:30",
-                estado = RegistroFaena.ESTADO_EN_CURSO
+                estado = RegistroFaena.ESTADO_EN_CURSO,
+                autorizadoPor = "Cristóbal Loncón C. (SEREMI: PR-10892-X)"
             )
         )
     )
@@ -546,7 +628,8 @@ class AquaRepository private constructor() {
         actualizarFaena(faenaId) { it.conDatos(centro, tipo, profundidad, minutos) }
 
     /**
-     * Registra la encuesta de salud de una faena en el [momento] indicado.
+     * Registra la encuesta de salud de una faena en el [momento] indicado, solo si la propia
+     * faena lo permite (ver [RegistroFaena.bloqueoEncuesta]). Si ya había una, la reemplaza.
      * También deja el último resultado en la ficha del buzo.
      */
     fun registrarEncuestaSalud(

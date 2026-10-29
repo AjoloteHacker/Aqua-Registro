@@ -63,7 +63,7 @@ class TrabajoViewModel(
             repository.prevencionistaActivo.collect { prev ->
                 if (prev != null) {
                     _uiState.update {
-                        it.copy(supervisor = "${prev.nombre} (Prevencionista)")
+                        it.copy(supervisor = "${prev.nombre} (SEREMI: ${prev.registroSeremi})")
                     }
                 }
             }
@@ -119,7 +119,11 @@ class TrabajoViewModel(
             profundidadMetros = prof,
             tiempoMinutos = mins,
             fechaHora = fechaHoraActual,
-            estado = "Autorizada y en Curso"
+            estado = "Autorizada y en Curso",
+            autorizadoPor = state.supervisor.trim().ifBlank {
+                repository.prevencionistaActivo.value?.let { "${it.nombre} (SEREMI: ${it.registroSeremi})" }
+                    ?: "Prevencionista de Turno"
+            }
         )
 
         repository.autorizarFaena(nuevaFaena)

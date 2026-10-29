@@ -23,6 +23,7 @@ data class RegistroFaena(
     val tiempoMinutos: Int,
     val fechaHora: String,
     val estado: String = ESTADO_EN_CURSO,
+    val autorizadoPor: String = "Cristóbal Loncón C. (Prevencionista)",
     val aprobacion: AprobacionDatos? = null
 ) {
     val enCurso: Boolean get() = estado.contains("Curso", ignoreCase = true)

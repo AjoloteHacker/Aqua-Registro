@@ -66,10 +66,49 @@ fun HistorialScreen(
                 .background(AquaBackground)
                 .padding(16.dp)
         ) {
+            @Suppress("DEPRECATION")
+            TabRow(
+                selectedTabIndex = uiState.selectedTab,
+                containerColor = Color.White,
+                contentColor = AquaPrimary
+            ) {
+                Tab(
+                    selected = uiState.selectedTab == 0,
+                    onClick = { viewModel.onTabChange(0) },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ScubaDiving, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Bitácora de Faenas (${uiState.faenas.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+                Tab(
+                    selected = uiState.selectedTab == 1,
+                    onClick = { viewModel.onTabChange(1) },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.MedicalInformation, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Historial Médico (${uiState.historialMedico.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             OutlinedTextField(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.onSearchQueryChange(it) },
-                label = { Text("Buscar por folio, buzo, centro o faena") },
+                label = {
+                    Text(
+                        if (uiState.selectedTab == 0)
+                            "Buscar por folio, buzo, supervisor o centro"
+                        else
+                            "Buscar por buzo, RUT, folio o evaluador"
+                    )
+                },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar", tint = AquaPrimary) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -81,11 +120,17 @@ fun HistorialScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            val filtrosActuales = if (uiState.selectedTab == 0) {
+                listOf("Todas", "En Curso", "Completada")
+            } else {
+                listOf("Todas", "Aptos", "No Aptos")
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Todas", "En Curso", "Completada").forEach { filtro ->
+                filtrosActuales.forEach { filtro ->
                     FilterChip(
                         selected = uiState.selectedFilter == filtro,
                         onClick = { viewModel.onFilterChange(filtro) },
@@ -100,37 +145,79 @@ fun HistorialScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = "Registros de Bitácora (${uiState.faenasFiltradas.size})",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = AquaTextPrimary
-            )
+            if (uiState.selectedTab == 0) {
+                Text(
+                    text = "Registros de Bitácora (${uiState.faenasFiltradas.size})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = AquaTextPrimary
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            if (uiState.faenasFiltradas.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.SearchOff, contentDescription = "Sin resultados", tint = Color.Gray, modifier = Modifier.size(48.dp))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("No se encontraron registros de faena", color = AquaTextSecondary)
+                if (uiState.faenasFiltradas.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.SearchOff, contentDescription = "Sin resultados", tint = Color.Gray, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("No se encontraron registros de faena", color = AquaTextSecondary)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(uiState.faenasFiltradas, key = { it.id }) { faena ->
+                            FaenaCard(
+                                faena = faena,
+                                cantidadPendientes = uiState.pendientesPorFaena[faena.id]?.size ?: 0,
+                                onRevisar = { viewModel.abrirRevision(faena.id) }
+                            )
+                        }
                     }
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(uiState.faenasFiltradas, key = { it.id }) { faena ->
-                        FaenaCard(
-                            faena = faena,
-                            cantidadPendientes = uiState.pendientesPorFaena[faena.id]?.size ?: 0,
-                            onRevisar = { viewModel.abrirRevision(faena.id) }
-                        )
+                Text(
+                    text = "Evaluaciones Médicas Registradas (${uiState.chequeosFiltrados.size})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = AquaTextPrimary
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (uiState.chequeosFiltrados.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.SearchOff, contentDescription = "Sin resultados", tint = Color.Gray, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("No se encontraron registros médicos", color = AquaTextSecondary)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(uiState.chequeosFiltrados, key = { it.id }) { chequeo ->
+                            ElevatedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.elevatedCardColors(containerColor = Color.White),
+                                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Box(modifier = Modifier.padding(10.dp)) {
+                                    RegistroMedicoItem(chequeo = chequeo)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -280,6 +367,22 @@ fun FaenaCard(
                     color = AquaTextSecondary
                 )
             }
+            Spacer(modifier = Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.VerifiedUser,
+                    contentDescription = null,
+                    tint = AquaPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = "Autorizó: ${faena.autorizadoPor}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AquaPrimary
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
@@ -297,11 +400,20 @@ fun FaenaCard(
                         fontWeight = FontWeight.Bold,
                         color = AquaSecondary
                     )
-                    Text(
-                        text = "🕒 ${faena.fechaHora}",
-                        fontSize = 11.sp,
-                        color = AquaTextSecondary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = AquaTextSecondary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = faena.fechaHora,
+                            fontSize = 11.sp,
+                            color = AquaTextSecondary
+                        )
+                    }
                     if (enCurso) {
                         Text(
                             text = if (cantidadPendientes == 0) {
@@ -382,6 +494,7 @@ fun RevisionFaenaDialog(
                 DatoFila("Profundidad", "${faena.profundidadMetros} m")
                 DatoFila("Tiempo máx.", "${faena.tiempoMinutos} min")
                 DatoFila("Autorizada", faena.fechaHora)
+                DatoFila("Autorizó", faena.autorizadoPor)
 
                 if (aprobacion != null) {
                     Row(verticalAlignment = Alignment.Top) {

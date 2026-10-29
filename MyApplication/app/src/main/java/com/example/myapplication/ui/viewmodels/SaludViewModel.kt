@@ -33,15 +33,16 @@ data class SaludUiState(
     val presionArterial: String = "120/80",
     val frecuenciaCardiaca: String = "72",
 
-    // Antropometría y Laboratorio
-    val pesoKg: String = "",
-    val talla: String = "",
-    val colesterol: String = "",
-    val hdl: String = "",
-    val ldl: String = "",
-    val trigliceridos: String = "",
+    // Antropometría y Laboratorio (Peso y Talla se seleccionan con rueda)
+    val pesoKg: String = "78",
+    val talla: String = "1.75",
+    val colesterol: String = "180",
+    val hdl: String = "50",
+    val ldl: String = "105",
+    val trigliceridos: String = "130",
     val hemograma: Boolean = true,
-    val glicemiaBasal: String = "",
+    val glicemiaBasal: String = "90",
+    val historialMedico: List<Chequeo> = emptyList(),
 
     // Cuestionario de salud
     val testEsfuerzo: Boolean = true,
@@ -142,6 +143,11 @@ class SaludViewModel(
                 repository.etapasConfirmadas
             ) { faenas, buzos, _, _, _ -> faenas.filter { it.enCurso } to buzos }
                 .collect { (enCurso, buzos) -> sincronizar(enCurso, buzos) }
+        }
+        viewModelScope.launch {
+            repository.historialMedico.collect { lista ->
+                _uiState.update { it.copy(historialMedico = lista) }
+            }
         }
         // Cuando Historial pide registrar la encuesta de una faena, se preselecciona aquí.
         viewModelScope.launch {
@@ -269,10 +275,18 @@ class SaludViewModel(
             return
         }
 
-        // Registro histórico del chequeo (igual que antes)
+        // Registro histórico del chequeo médico completo
+        val evaluador = repository.prevencionistaActivo.value?.let {
+            "${it.nombre} (SEREMI: ${it.registroSeremi})"
+        } ?: "Prevencionista de Turno"
+
         val nuevoChequeo = Chequeo(
-            id = "${AppData.chequeos.size + 1}",
+            id = "CH-${100 + repository.historialMedico.value.size + 1}",
             buzoRut = buzo.rut,
+            buzoNombre = buzo.nombre,
+            faenaId = faena.id,
+            momento = state.momento.etiqueta,
+            fechaHora = repository.obtenerFechaHoraActual(),
             fecha = LocalDate.now(),
             esApto = state.esApto,
             pesoKg = state.pesoVal!!,
@@ -284,9 +298,10 @@ class SaludViewModel(
             hemograma = state.hemograma,
             glicemiaBasal = state.glicemiaVal!!,
             presionArterial = state.presionArterial.trim(),
-            frecuenciaCardiaca = state.pulso!!
+            frecuenciaCardiaca = state.pulso!!,
+            evaluadoPor = evaluador
         )
-        AppData.chequeos.add(nuevoChequeo)
+        repository.registrarChequeoMedico(nuevoChequeo)
 
         val mensaje = if (state.esApto) {
             "Encuesta (${state.momento.etiqueta}) de ${faena.id} registrada: ${buzo.nombre} declarado APTO."
@@ -298,13 +313,13 @@ class SaludViewModel(
             it.copy(
                 userMessage = mensaje,
                 mostrarErrores = false,
-                pesoKg = "",
-                talla = "",
-                colesterol = "",
-                hdl = "",
-                ldl = "",
-                trigliceridos = "",
-                glicemiaBasal = "",
+                pesoKg = "78",
+                talla = "1.75",
+                colesterol = "180",
+                hdl = "50",
+                ldl = "105",
+                trigliceridos = "130",
+                glicemiaBasal = "90",
                 hemograma = true,
                 testEsfuerzo = true,
                 gastroIntestinal = true,

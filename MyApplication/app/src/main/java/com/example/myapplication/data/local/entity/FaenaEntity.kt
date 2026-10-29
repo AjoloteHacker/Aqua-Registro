@@ -21,6 +21,7 @@ data class FaenaEntity(
     val tiempoMinutos: Int,
     val fechaHora: String,
     val estado: String,
+    val autorizadoPor: String = "Cristóbal Loncón C. (Prevencionista)",
     val aprobadoPor: String? = null,
     val aprobadoEn: String? = null
 ) {
@@ -35,6 +36,7 @@ data class FaenaEntity(
         tiempoMinutos = tiempoMinutos,
         fechaHora = fechaHora,
         estado = estado,
+        autorizadoPor = autorizadoPor,
         aprobacion = if (aprobadoPor != null && aprobadoEn != null) {
             AprobacionDatos(aprobadoPor, aprobadoEn)
         } else null
@@ -52,6 +54,7 @@ data class FaenaEntity(
             tiempoMinutos = faena.tiempoMinutos,
             fechaHora = faena.fechaHora,
             estado = faena.estado,
+            autorizadoPor = faena.autorizadoPor,
             aprobadoPor = faena.aprobacion?.aprobadoPor,
             aprobadoEn = faena.aprobacion?.fechaHora
         )

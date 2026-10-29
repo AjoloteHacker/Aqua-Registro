@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.myapplication.data.model.EstadoSalud
 import androidx.compose.material.icons.automirrored.filled.FactCheck
 import com.example.myapplication.ui.viewmodels.MenuViewModel
@@ -408,6 +410,62 @@ fun MenuScreen(
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
                     ) {
+                        // Generador de foto con Random User
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AquaPrimary.copy(alpha = 0.06f))
+                                .padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AsyncImage(
+                                model = buzoUiState.nuevaFotoUrl.ifBlank { "https://randomuser.me/api/portraits/men/1.jpg" },
+                                contentDescription = "Foto de perfil",
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .clip(CircleShape)
+                                    .background(AquaPrimary.copy(alpha = 0.15f)),
+                                contentScale = ContentScale.Crop
+                            )
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Foto de Perfil (Random User)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AquaTextSecondary
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                OutlinedButton(
+                                    onClick = { buzoViewModel.generarFotoAleatoria() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    enabled = !buzoUiState.cargandoFoto
+                                ) {
+                                    if (buzoUiState.cargandoFoto) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(14.dp),
+                                            strokeWidth = 2.dp,
+                                            color = AquaPrimary
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Cargando...", fontSize = 11.sp)
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Generar otra foto", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+
                         OutlinedTextField(
                             value = buzoUiState.nuevoNombre,
                             onValueChange = { buzoViewModel.onNuevoNombreChange(it) },

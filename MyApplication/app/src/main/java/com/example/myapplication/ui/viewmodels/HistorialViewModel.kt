@@ -2,6 +2,7 @@ package com.example.myapplication.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.Chequeo
 import com.example.myapplication.data.model.MomentoSalud
 import com.example.myapplication.data.model.Pendiente
 import com.example.myapplication.data.model.RegistroFaena
@@ -16,7 +17,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class HistorialUiState(
+    val selectedTab: Int = 0,
     val faenas: List<RegistroFaena> = emptyList(),
+    val historialMedico: List<Chequeo> = emptyList(),
     val searchQuery: String = "",
     val selectedFilter: String = "Todas",
     val userMessage: String? = null,
@@ -37,11 +40,30 @@ data class HistorialUiState(
                     faena.centroCultivo.contains(searchQuery, ignoreCase = true) ||
                     faena.tipoFaena.contains(searchQuery, ignoreCase = true) ||
                     faena.empresa.contains(searchQuery, ignoreCase = true) ||
+                    faena.autorizadoPor.contains(searchQuery, ignoreCase = true) ||
                     faena.id.contains(searchQuery, ignoreCase = true)
 
             val coincideFiltro = when (selectedFilter) {
                 "En Curso" -> faena.enCurso
                 "Completada" -> faena.completada
+                else -> true
+            }
+
+            coincideTexto && coincideFiltro
+        }
+
+    val chequeosFiltrados: List<Chequeo>
+        get() = historialMedico.filter { chequeo ->
+            val coincideTexto = searchQuery.isBlank() ||
+                    chequeo.buzoNombre.contains(searchQuery, ignoreCase = true) ||
+                    chequeo.buzoRut.contains(searchQuery, ignoreCase = true) ||
+                    chequeo.faenaId.contains(searchQuery, ignoreCase = true) ||
+                    chequeo.evaluadoPor.contains(searchQuery, ignoreCase = true) ||
+                    chequeo.id.contains(searchQuery, ignoreCase = true)
+
+            val coincideFiltro = when (selectedFilter) {
+                "En Curso", "Aptos" -> chequeo.esApto
+                "Completada", "No Aptos" -> !chequeo.esApto
                 else -> true
             }
 
@@ -82,6 +104,15 @@ class HistorialViewModel(
             ) { faenas, _, _, _, _ -> faenas }
                 .collect { faenas -> actualizarFaenas(faenas) }
         }
+        viewModelScope.launch {
+            repository.historialMedico.collect { lista ->
+                _uiState.update { it.copy(historialMedico = lista) }
+            }
+        }
+    }
+
+    fun onTabChange(tab: Int) = _uiState.update {
+        it.copy(selectedTab = tab, selectedFilter = "Todas")
     }
 
     private fun actualizarFaenas(faenas: List<RegistroFaena>) {
