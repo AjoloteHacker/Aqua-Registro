@@ -30,7 +30,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.EstadoSalud
-import com.example.myapplication.data.repository.AquaRepository
+import androidx.compose.material.icons.automirrored.filled.FactCheck
+import com.example.myapplication.ui.viewmodels.MenuViewModel
 import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
@@ -46,12 +47,13 @@ import com.example.myapplication.ui.viewmodels.BuzoViewModel
 fun MenuScreen(
     navController: NavController,
     onOpenDrawer: () -> Unit = {},
-    repository: AquaRepository = AquaRepository.getInstance(),
+    menuViewModel: MenuViewModel = viewModel(),
     buzoViewModel: BuzoViewModel = viewModel()
 ) {
-    val prevencionista by repository.prevencionistaActivo.collectAsState()
-    val buzos by repository.buzos.collectAsState()
-    val faenas by repository.faenas.collectAsState()
+    val prevencionista by menuViewModel.prevencionistaActivo.collectAsState()
+    val buzos by menuViewModel.buzos.collectAsState()
+    val faenas by menuViewModel.faenas.collectAsState()
+    val isConnected by menuViewModel.isNetworkConnected.collectAsState()
     val buzoUiState by buzoViewModel.uiState.collectAsState()
 
     val buzosAptos = remember(buzos) { buzos.count { it.estadoSalud == EstadoSalud.APTO } }
@@ -77,7 +79,7 @@ fun MenuScreen(
         onOpenDrawer = onOpenDrawer,
         actions = {
             IconButton(onClick = {
-                repository.logout()
+                menuViewModel.logout()
                 navController.navigate(Screen.Login.route) {
                     popUpTo(0) { inclusive = true }
                 }
@@ -158,6 +160,37 @@ fun MenuScreen(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp), color = AquaBackground)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 14.dp, bottom = 10.dp, top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
+                            contentDescription = "Estado de Red",
+                            tint = if (isConnected) SafetySuccess else Color(0xFFF59E0B),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isConnected) "En Línea (Sincronizado)" else "Modo Terreno Offline",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isConnected) SafetySuccess else Color(0xFFB45309)
+                        )
+                    }
+                    Text(
+                        text = "Persistencia Room SQLite",
+                        fontSize = 11.sp,
+                        color = AquaTextSecondary
+                    )
                 }
             }
 
@@ -328,7 +361,7 @@ fun MenuScreen(
                     numeroBoceto = "3",
                     titulo = "Historial",
                     subtitulo = "${faenas.size} Faenas",
-                    icono = Icons.Default.FactCheck,
+                    icono = Icons.AutoMirrored.Filled.FactCheck,
                     badgeIcon = if (faenasPendientes > 0) Icons.Default.PendingActions else Icons.Default.Check,
                     colorTema = if (faenasPendientes > 0) SafetyWarning else AquaSecondary,
                     onClick = { navController.navigate(Screen.Historial.route) }
