@@ -5,9 +5,11 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.myapplication.data.local.dao.BuzoDao
+import com.example.myapplication.data.local.dao.ChequeoDao
 import com.example.myapplication.data.local.dao.EmpresaDao
 import com.example.myapplication.data.local.dao.FaenaDao
 import com.example.myapplication.data.local.entity.BuzoEntity
+import com.example.myapplication.data.local.entity.ChequeoEntity
 import com.example.myapplication.data.local.entity.EmpresaEntity
 import com.example.myapplication.data.local.entity.FaenaEntity
 
@@ -15,14 +17,15 @@ import com.example.myapplication.data.local.entity.FaenaEntity
  * Base de datos principal de Room (SQLite) para Aqua-Registro.
  */
 @Database(
-    entities = [BuzoEntity::class, FaenaEntity::class, EmpresaEntity::class],
-    version = 2,
+    entities = [BuzoEntity::class, FaenaEntity::class, EmpresaEntity::class, ChequeoEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun buzoDao(): BuzoDao
     abstract fun faenaDao(): FaenaDao
     abstract fun empresaDao(): EmpresaDao
+    abstract fun chequeoDao(): ChequeoDao
 
     companion object {
         @Volatile

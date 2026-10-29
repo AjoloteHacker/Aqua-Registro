@@ -25,24 +25,26 @@
 2. **Enrolamiento y Gestión de Buzos (CRUD Completo):**
    * Registro con nombre, RUT, matrícula marítima DIRECTEMAR, empresa contratista y teléfono.
    * Modificación de datos y eliminación protegida (no permite borrar buzos con faenas activas).
-   * Generación y selección de foto de perfil.
+   * Generación y selección de foto de perfil de trabajadores mediante API **RandomUser** (`RandomUserGenerator`) y carga asíncrona con **Coil**.
 3. **Auditoría Técnica de Equipos de Buceo:**
    * Checklist interactivo de los 9 implementos técnicos obligatorios según normativa marítima.
    * Evidencias por etapas: *Pre-equipación* y *Equipado*.
    * **Integración con Cámara Nativa:** Captura de evidencia fotográfica del estado del equipo almacenada mediante `FileProvider`.
 4. **Encuesta Biomédica de Salud Pre y Post Buceo:**
    * Evaluación de presión arterial sistólica/diastólica, frecuencia cardíaca y signos vitales.
+   * **Selector de Rueda (*Wheel Picker*) sin teclado:** Selección ergonómica de Peso Corporal (kg) y Estatura/Talla (m) con cálculo automático de IMC, además de perfil lipídico y laboratorio.
    * Declaración jurada de condiciones físicas (descanso, sin congestión, sin medicamentos).
-   * Dictamen algorítmico reactivo de aptitud médica: `APTO` o `NO_APTO`.
+   * Dictamen algorítmico reactivo de aptitud médica: `APTO` o `NO_APTO` y registro en el **Historial Médico**.
 5. **Planificación AST y Autorización de Faenas:**
-   * Registro de profundidad máxima de inmersión, tiempo de fondo y centro operativo.
-   * Bloqueo estricto de inicio de faena si el buzo no cuenta con salud apta o equipos conformes.
-6. **Bitácora e Historial Digital:**
-   * Lista reactiva de inmersiones con buscador en tiempo real por folio, buzo o centro.
-   * Filtros dinámicos por estado (*Todas*, *En Curso*, *Completada*).
-   * Ficha de detalle, registro de firmas/aprobaciones digitales y cierre formal de faenas.
+   * Registro de profundidad máxima de inmersión, tiempo de fondo, centro operativo y **prevencionista que autorizó la faena** (con credencial SEREMI).
+   * Control de requisitos previos antes del cierre formal de la inmersión.
+6. **Bitácora e Historial Digital (Faenas e Historial Médico):**
+   * Vista en dos pestañas: **Bitácora de Faenas** e **Historial Médico** de evaluaciones biomédicas.
+   * Lista reactiva con buscador en tiempo real por folio, buzo, RUT, evaluador/supervisor o centro.
+   * Filtros dinámicos por estado (*Todas*, *En Curso*, *Completada* / *Aptos*, *No Aptos*).
+   * Ficha de detalle, registro de quién autorizó y aprobó la faena, y cierre formal de inmersiones.
 7. **Gestión de Empresas Contratistas:**
-   * Catálogo extensible de empresas prestadoras de servicios de buceo comercial.
+   * Catálogo extensible y persistente de empresas prestadoras de servicios de buceo comercial.
 
 ---
 
@@ -66,8 +68,8 @@ graph TD
         Repo["AquaRepository (Singleton Orquestador)"]
         NetMon["NetworkMonitor (ConnectivityManager)"]
         RoomDB["AppDatabase (Room SQLite)"]
-        DAOs["DAOs (BuzoDao, FaenaDao, EmpresaDao)"]
-        Entities["Entities (BuzoEntity, FaenaEntity, EmpresaEntity)"]
+        DAOs["DAOs (BuzoDao, FaenaDao, EmpresaDao, ChequeoDao)"]
+        Entities["Entities (BuzoEntity, FaenaEntity, EmpresaEntity, ChequeoEntity)"]
     end
 
     Screens -->|Eventos de Usuario / Intents| VM
@@ -91,8 +93,8 @@ graph TD
 
 2. **Persistencia Local con Room SQLite (`data.local`):**
    * [`AppDatabase`](MyApplication/app/src/main/java/com/example/myapplication/data/local/AppDatabase.kt): Base de datos Room (`aqua_registro.db`) con pre-poblado inteligente.
-   * [`BuzoEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/BuzoEntity.kt), [`FaenaEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/FaenaEntity.kt), [`EmpresaEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/EmpresaEntity.kt): Entidades con `@Entity` y claves primarias.
-   * [`BuzoDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/BuzoDao.kt), [`FaenaDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/FaenaDao.kt), [`EmpresaDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/EmpresaDao.kt): Métodos DAO con `@Insert`, `@Query`, `@Update`, `@Delete`.
+   * [`BuzoEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/BuzoEntity.kt), [`FaenaEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/FaenaEntity.kt), [`EmpresaEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/EmpresaEntity.kt), [`ChequeoEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/ChequeoEntity.kt): Entidades con `@Entity` y claves primarias.
+   * [`BuzoDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/BuzoDao.kt), [`FaenaDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/FaenaDao.kt), [`EmpresaDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/EmpresaDao.kt), [`ChequeoDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/ChequeoDao.kt): Métodos DAO con `@Insert`, `@Query`, `@Update`, `@Delete`.
 
 3. **Repositorio Central (`data.repository`):**
    * [`AquaRepository`](MyApplication/app/src/main/java/com/example/myapplication/data/repository/AquaRepository.kt): Orquestador Singleton que alimenta los flujos `StateFlow` reactivos de la UI mientras persiste en segundo plano en Room SQLite.
@@ -152,10 +154,11 @@ stateDiagram-v2
 
 ---
 
-##  Planificación del Proyecto (Trello)
+##  Planificación del Proyecto y Control Colaborativo (Trello y GitHub)
 
-El avance de tareas, historias de usuario, asignación de responsabilidades y trazabilidad de pendientes se gestiona mediante el tablero oficial del equipo en **Trello**:
-* **Tablero Trello del Proyecto:** [Aqua-Registro — Sprint Planning & Tareas](https://trello.com/b/aqua-registro-smiling-friends) *(o enlace a herramienta colaborativa equivalente)*
+El avance de tareas, historias de usuario, asignación de responsabilidades y trazabilidad de pendientes se gestiona mediante **Trello** y **Pull Requests en GitHub**:
+* **Repositorio y Pull Requests del Equipo:** [GitHub — AjoloteHacker/Aqua-Registro](https://github.com/AjoloteHacker/Aqua-Registro/pulls?q=is%3Apr)
+* **Tablero Trello del Proyecto:** [Aqua-Registro — Sprint Planning & Tareas](https://trello.com/b/aqua-registro-smiling-friends)
 * **Columnas de Seguimiento:** `Backlog / Historias de Usuario` ➔ `En Progreso (Sprint Activo)` ➔ `En Revisión / QA` ➔ `Completado (Done / Entregable)`.
 
 ---
@@ -171,7 +174,7 @@ El avance de tareas, historias de usuario, asignación de responsabilidades y tr
 ### Pasos para Ejecutar:
 1. **Clonar el repositorio:**
    ```bash
-   git clone https://github.com/tu-usuario/Aqua-Registro.git
+   git clone https://github.com/AjoloteHacker/Aqua-Registro.git
    cd Aqua-Registro
    ```
 2. **Abrir en Android Studio:**

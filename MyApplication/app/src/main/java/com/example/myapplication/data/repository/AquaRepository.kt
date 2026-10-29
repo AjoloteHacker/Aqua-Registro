@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.myapplication.data.Chequeo
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.entity.BuzoEntity
+import com.example.myapplication.data.local.entity.ChequeoEntity
 import com.example.myapplication.data.local.entity.EmpresaEntity
 import com.example.myapplication.data.local.entity.FaenaEntity
 import com.example.myapplication.data.model.*
@@ -222,6 +223,9 @@ class AquaRepository private constructor() {
 
     fun registrarChequeoMedico(chequeo: Chequeo) {
         _historialMedico.update { listOf(chequeo) + it }
+        coroutineScope.launch {
+            database?.chequeoDao()?.insertOrUpdate(ChequeoEntity.fromDomain(chequeo))
+        }
     }
 
     // Pedido "revisa esta faena" (Historial -> Control de Equipos / Encuesta de Salud)
@@ -297,6 +301,7 @@ class AquaRepository private constructor() {
             val buzoDao = db.buzoDao()
             val faenaDao = db.faenaDao()
             val empresaDao = db.empresaDao()
+            val chequeoDao = db.chequeoDao()
 
             // 1. Inicializar empresas
             if (empresaDao.count() == 0) {
@@ -317,6 +322,13 @@ class AquaRepository private constructor() {
                 faenaDao.insertAll(_faenas.value.map { FaenaEntity.fromDomain(it) })
             } else {
                 _faenas.value = faenaDao.getAllFaenas().map { it.toDomain() }
+            }
+
+            // 4. Inicializar historial médico
+            if (chequeoDao.count() == 0) {
+                chequeoDao.insertAll(_historialMedico.value.map { ChequeoEntity.fromDomain(it) })
+            } else {
+                _historialMedico.value = chequeoDao.getAllChequeos().map { it.toDomain() }
             }
         }
     }
