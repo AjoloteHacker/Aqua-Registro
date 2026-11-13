@@ -97,6 +97,28 @@ Existe una propiedad de salud que no puede actualizarse, debido a que se elimino
 
 ## Cambios a realizar
 
+### Novedad / Faenas sin terminar
+
+Las faenas pueden terminar antes de tiempo, anticipando que los buzos pueden estar enfermos o los equipos en mal estado
+
+Para cerrar una faena sin terminar se debe completar un formulario simple, con una pregunta de seleccion multiple 
+
+¿Por que se cierra la faena sin terminar?
+- Equipo en mal estado
+- Buzos enfermos
+- Accidente de buzo
+- Prevencionista enfermo
+- Mal tiempo
+- Otro
+
+El prevencionista puede marcar mas de una opción
+
+En el caso de las primeras 2 respuestas, la opcion se marcara en automatico si en la faena ya se marco equipo inutilizable o buzo no apto
+
+En el caso que se eliga otro, el prevencionista puede listar mas de una opcion no considerada
+
+Tambien se dara la opcion de agregar un comentario, que puede modificarse incluso cuando cierre la faena
+
 ### Eliminacion de botones laterales
 
 Los accesos directos a Registro Faena, Encuesta de salud y Control de equipos pueden causar confucion y saturan el boton lateral
@@ -127,13 +149,13 @@ Para realizar una faena se nesecitan 2 buzos, el que la realiza y un socorrista,
 
 Ya que el socorrista no necesariamente participa en la inmersion directamente, el usuario debe ser capaz de cerrar una faena completada sin la necesidad de cumplir la encuesta de salud post-inmersion
 
-#### Cambio / Flujo de equipo
+### Cambio / Flujo de equipo
 
 Previo a inmersion: Ahora basta con una foto general y el estado individual de los equipos
 
 Equipado: Ahora se exige una foto de frente y atras, ademas, ahora se comparte el estado con previo a inmersion. La fase de encuesta de salud ahora puede realizarce sin terminar el chequeo de equipo
 
-#### Cambio / Distincion de encuesta de salud y ficha de salud
+### Cambio / Distincion de encuesta de salud y ficha de salud
 
 La ficha de salud es parte del perfil del buzo y contiene los siguientes datos
 
@@ -148,7 +170,7 @@ El chequeo de salud ya no solicitara estos datos
 Ahora el chequeo de salud es independiente de el de equipo
 Todos los datos de medicion tendran un rango de valores aceptable, riesgoso e incapacitante
 
-#### Mejora / Formatos automaticos
+### Mejora / Formatos automaticos
 
 Los siguientes datos tendran formato automatico en su ingreso
 
@@ -156,7 +178,7 @@ Los siguientes datos tendran formato automatico en su ingreso
 - Número
     - Se agregaran paises para dar los formatos adecuados
 
-#### Mejora / Fechas y alertas
+### Mejora / Fechas y alertas
 
 La vigencia de las matriculas de buzo se almacenara como con la fecha de "inicio" en las fichas de cada buzo, dando una advertencia invasiva cuando queden 60 a 15 dias, y dando un pop up al iniciar sesion cuando menos de 15 dias
 
