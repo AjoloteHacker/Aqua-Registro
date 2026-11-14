@@ -127,7 +127,7 @@ Los accesos directos a Registro Faena, Encuesta de salud y Control de equipos pu
 
 Para facilitar el ingreso de datos como profundidad, tiempo, pulso, etc se cambiara sus "cajas de texto" a "ruedas"
 
-#### Mejora / Apoyo visual
+### Mejora / Apoyo visual
 
 Todos los nombres de datos ahora tendran un icono de apoyo, para mejorar la visibilidad en condiciones de lluvia, niebla o similar
 
