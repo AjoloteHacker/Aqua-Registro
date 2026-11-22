@@ -21,8 +21,6 @@ data class Chequeo(
     val fechaHora: String = "",
     val fecha: LocalDate = LocalDate.now(),
     val esApto: Boolean,
-    val pesoKg: Double,
-    val tallaM: Double,
     val colesterolTotal: Int,
     val hdl: Int,
     val ldl: Int,

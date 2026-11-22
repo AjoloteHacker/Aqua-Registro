@@ -144,40 +144,11 @@ data class RegistroFaena(
 
     /**
      * Motivo por el que todavía no se puede registrar la encuesta de [momento]
-     * (null si ya está habilitada):
-     *  - ANTES: requiere la etapa «Equipado» confirmada (el buzo ya está equipado).
-     *  - DESPUÉS: requiere equipos completos y confirmados, encuesta ANTES y datos aprobados.
+     * (null si ya está habilitada). La encuesta solo requiere que la faena esté en curso.
      */
     fun bloqueoEncuesta(momento: MomentoSalud, avance: AvanceFaena): String? {
         if (!enCurso) return "La faena $id ya no está en curso."
-        return when (momento) {
-            MomentoSalud.ANTES ->
-                if (EtapaComprobacion.EQUIPADO in avance.etapasConfirmadas) {
-                    null
-                } else {
-                    "Primero confirma la etapa «Equipado» en Control de Equipos: " +
-                        "la encuesta ANTES se aplica con el buzo ya equipado."
-                }
-
-            MomentoSalud.DESPUES -> {
-                val faltan = mutableListOf<String>()
-                if (pendientesEquipos(avance).isNotEmpty()) {
-                    faltan.add("completar y confirmar la revisión de equipos")
-                }
-                if (MomentoSalud.ANTES !in avance.encuestas) {
-                    faltan.add("registrar la encuesta ANTES")
-                }
-                if (!datosAprobados) {
-                    faltan.add("aprobar los datos de la faena")
-                }
-                if (faltan.isEmpty()) {
-                    null
-                } else {
-                    "La encuesta DESPUÉS se habilita cuando todo lo demás está revisado. " +
-                        "Falta: ${faltan.joinToString(", ")}."
-                }
-            }
-        }
+        return null
     }
 
     // ───────────────────────── Datos de la faena ─────────────────────────

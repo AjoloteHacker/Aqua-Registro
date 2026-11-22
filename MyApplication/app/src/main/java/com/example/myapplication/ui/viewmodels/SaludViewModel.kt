@@ -33,9 +33,7 @@ data class SaludUiState(
     val presionArterial: String = "120/80",
     val frecuenciaCardiaca: String = "72",
 
-    // Antropometría y Laboratorio (Peso y Talla se seleccionan con rueda)
-    val pesoKg: String = "78",
-    val talla: String = "1.75",
+    // Laboratorio
     val colesterol: String = "180",
     val hdl: String = "50",
     val ldl: String = "105",
@@ -88,13 +86,7 @@ data class SaludUiState(
     val signosEnRango: Boolean
         get() = pulsoValido && presionValida
 
-    // Valores numéricos de antropometría y laboratorio
-    val pesoVal: Double?
-        get() = pesoKg.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }
-
-    val tallaVal: Double?
-        get() = talla.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }
-
+    // Valores numéricos de laboratorio
     val colesterolVal: Int?
         get() = colesterol.toIntOrNull()?.takeIf { it > 0 }
 
@@ -212,9 +204,7 @@ class SaludViewModel(
         }
     }
 
-    // Mutadores antropometría y laboratorio
-    fun onPesoChange(v: String) = _uiState.update { it.copy(pesoKg = v) }
-    fun onTallaChange(v: String) = _uiState.update { it.copy(talla = v) }
+    // Mutadores laboratorio
     fun onColesterolChange(v: String) = _uiState.update { it.copy(colesterol = v) }
     fun onHdlChange(v: String) = _uiState.update { it.copy(hdl = v) }
     fun onLdlChange(v: String) = _uiState.update { it.copy(ldl = v) }
@@ -249,7 +239,6 @@ class SaludViewModel(
 
         // Validar campos obligatorios
         if (!state.signosEnRango ||
-            state.pesoVal == null || state.tallaVal == null ||
             state.colesterolVal == null || state.hdlVal == null ||
             state.ldlVal == null || state.trigliceridosVal == null ||
             state.glicemiaVal == null
@@ -289,8 +278,6 @@ class SaludViewModel(
             fechaHora = repository.obtenerFechaHoraActual(),
             fecha = LocalDate.now(),
             esApto = state.esApto,
-            pesoKg = state.pesoVal!!,
-            tallaM = state.tallaVal!!,
             colesterolTotal = state.colesterolVal!!,
             hdl = state.hdlVal!!,
             ldl = state.ldlVal!!,
@@ -313,8 +300,6 @@ class SaludViewModel(
             it.copy(
                 userMessage = mensaje,
                 mostrarErrores = false,
-                pesoKg = "78",
-                talla = "1.75",
                 colesterol = "180",
                 hdl = "50",
                 ldl = "105",

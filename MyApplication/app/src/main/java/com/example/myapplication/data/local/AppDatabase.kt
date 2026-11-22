@@ -20,7 +20,7 @@ import com.example.myapplication.data.local.entity.FaenaEntity
  */
 @Database(
     entities = [BuzoEntity::class, FaenaEntity::class, EmpresaEntity::class, ChequeoEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -40,6 +40,51 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `chequeos_new` (
+                        `id` TEXT NOT NULL,
+                        `buzoRut` TEXT NOT NULL,
+                        `buzoNombre` TEXT NOT NULL,
+                        `faenaId` TEXT NOT NULL,
+                        `momento` TEXT NOT NULL,
+                        `fechaHora` TEXT NOT NULL,
+                        `fechaIso` TEXT NOT NULL,
+                        `esApto` INTEGER NOT NULL,
+                        `colesterolTotal` INTEGER NOT NULL,
+                        `hdl` INTEGER NOT NULL,
+                        `ldl` INTEGER NOT NULL,
+                        `trigliceridos` INTEGER NOT NULL,
+                        `hemograma` INTEGER NOT NULL,
+                        `glicemiaBasal` INTEGER NOT NULL,
+                        `presionArterial` TEXT NOT NULL,
+                        `frecuenciaCardiaca` INTEGER NOT NULL,
+                        `evaluadoPor` TEXT NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `chequeos_new` (
+                        `id`, `buzoRut`, `buzoNombre`, `faenaId`, `momento`, `fechaHora`, `fechaIso`, `esApto`,
+                        `colesterolTotal`, `hdl`, `ldl`, `trigliceridos`, `hemograma`, `glicemiaBasal`,
+                        `presionArterial`, `frecuenciaCardiaca`, `evaluadoPor`
+                    )
+                    SELECT
+                        `id`, `buzoRut`, `buzoNombre`, `faenaId`, `momento`, `fechaHora`, `fechaIso`, `esApto`,
+                        `colesterolTotal`, `hdl`, `ldl`, `trigliceridos`, `hemograma`, `glicemiaBasal`,
+                        `presionArterial`, `frecuenciaCardiaca`, `evaluadoPor`
+                    FROM `chequeos`
+                    """.trimIndent()
+                )
+                db.execSQL("DROP TABLE `chequeos`")
+                db.execSQL("ALTER TABLE `chequeos_new` RENAME TO `chequeos`")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -50,7 +95,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "aqua_registro.db"
                 )
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                     // Solo se usa si la BD instalada es anterior a la versión 3 (no hay ruta de migración).
                     .fallbackToDestructiveMigration()
                     .build()

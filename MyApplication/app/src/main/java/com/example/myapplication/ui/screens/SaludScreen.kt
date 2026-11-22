@@ -27,7 +27,7 @@ import com.example.myapplication.data.model.MomentoSalud
 import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.ui.viewmodels.SaludViewModel
-import java.util.Locale
+
 
 private fun textoNumericoValido(texto: String, decimal: Boolean): Boolean =
     if (decimal) {
@@ -423,7 +423,7 @@ fun SaludScreen(
                     }
                 }
 
-                // Sección 3: Parámetros Antropométricos y Laboratorio
+                // Sección 3: Perfil Lipídico y Laboratorio
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -436,50 +436,10 @@ fun SaludScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "3. Parámetros Antropométricos y Laboratorio",
+                            text = "3. Perfil Lipídico y Laboratorio",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = AquaPrimary
-                        )
-
-                        // Resumen automático de IMC
-                        val imc = remember(uiState.pesoVal, uiState.tallaVal) {
-                            val p = uiState.pesoVal
-                            val t = uiState.tallaVal
-                            if (p != null && t != null && t > 0) p / (t * t) else null
-                        }
-                        if (imc != null) {
-                            Surface(
-                                color = AquaPrimary.copy(alpha = 0.08f),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "IMC Calculado: ${String.format(Locale.US, "%.1f", imc)} kg/m²",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AquaPrimary
-                                    )
-                                    Text(
-                                        text = "${uiState.pesoKg} kg · ${uiState.talla} m",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = AquaTextSecondary
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            text = "Perfil Lipídico",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color.Black
                         )
 
                         CampoNumerico(
@@ -646,7 +606,7 @@ fun RegistroMedicoItem(chequeo: Chequeo) {
             color = AquaTextSecondary
         )
         Text(
-            text = "PA: ${chequeo.presionArterial} mmHg · Pulso: ${chequeo.frecuenciaCardiaca} lpm · Peso: ${chequeo.pesoKg} kg · Talla: ${chequeo.tallaM} m",
+            text = "PA: ${chequeo.presionArterial} mmHg · Pulso: ${chequeo.frecuenciaCardiaca} lpm",
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = AquaTextPrimary
