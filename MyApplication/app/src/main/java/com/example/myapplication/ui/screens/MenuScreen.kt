@@ -54,6 +54,8 @@ fun MenuScreen(
     val buzos by menuViewModel.buzos.collectAsState()
     val faenas by menuViewModel.faenas.collectAsState()
     val isConnected by menuViewModel.isNetworkConnected.collectAsState()
+    val climaMaritimo by menuViewModel.climaMaritimo.collectAsState()
+    val syncStatus by menuViewModel.syncStatus.collectAsState()
     val buzoUiState by buzoViewModel.uiState.collectAsState()
 
     val buzosAptos = remember(buzos) { buzos.count { it.estadoSalud == EstadoSalud.APTO } }
@@ -164,6 +166,32 @@ fun MenuScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp), color = AquaBackground)
 
+                // Clima Marítimo contextual para faenas (API Externa Open-Meteo)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Cloud,
+                        contentDescription = "Clima Marítimo",
+                        tint = AquaPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = climaMaritimo,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = AquaTextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp), color = AquaBackground)
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -171,26 +199,33 @@ fun MenuScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { menuViewModel.sincronizarAhora() }
+                    ) {
                         Icon(
-                            imageVector = if (isConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
-                            contentDescription = "Estado de Red",
+                            imageVector = if (isConnected) Icons.Default.Sync else Icons.Default.WifiOff,
+                            contentDescription = "Estado de Sincronización",
                             tint = if (isConnected) SafetySuccess else Color(0xFFF59E0B),
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isConnected) "En Línea (Sincronizado)" else "Modo Terreno Offline",
+                            text = if (isConnected) syncStatus else "Modo Terreno Offline (Room)",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = if (isConnected) SafetySuccess else Color(0xFFB45309)
                         )
                     }
-                    Text(
-                        text = "Persistencia Room SQLite",
-                        fontSize = 11.sp,
-                        color = AquaTextSecondary
-                    )
+                    if (isConnected) {
+                        Text(
+                            text = "Sincronizar ahora",
+                            fontSize = 10.sp,
+                            color = AquaPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { menuViewModel.sincronizarAhora() }
+                        )
+                    }
                 }
             }
 
