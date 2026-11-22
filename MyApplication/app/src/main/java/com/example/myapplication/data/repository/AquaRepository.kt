@@ -105,7 +105,12 @@ class AquaRepository private constructor() {
                 telefono = "+56 9 8451 2290",
                 estadoSalud = EstadoSalud.APTO,
                 ultimoChequeo = "15/09/2026 - 08:30 hrs",
-                fotoUrl = "https://randomuser.me/api/portraits/men/32.jpg"
+                fotoUrl = "https://randomuser.me/api/portraits/men/32.jpg",
+                estatura = 1.78f,
+                talla = 42f,
+                peso = 79.5f,
+                alergias = "Ninguna conocida",
+                edad = LocalDate.of(1988, 4, 12)
             ),
             Buzo(
                 id = "2",
@@ -116,7 +121,12 @@ class AquaRepository private constructor() {
                 telefono = "+56 9 7123 9940",
                 estadoSalud = EstadoSalud.PENDIENTE,
                 ultimoChequeo = "Pendiente de faena",
-                fotoUrl = "https://randomuser.me/api/portraits/men/44.jpg"
+                fotoUrl = "https://randomuser.me/api/portraits/men/44.jpg",
+                estatura = 1.72f,
+                talla = 40f,
+                peso = 74.0f,
+                alergias = "Penicilina",
+                edad = LocalDate.of(1993, 9, 27)
             ),
             Buzo(
                 id = "3",
@@ -127,7 +137,12 @@ class AquaRepository private constructor() {
                 telefono = "+56 9 9234 5512",
                 estadoSalud = EstadoSalud.APTO,
                 ultimoChequeo = "15/09/2026 - 09:15 hrs",
-                fotoUrl = "https://randomuser.me/api/portraits/men/68.jpg"
+                fotoUrl = "https://randomuser.me/api/portraits/men/68.jpg",
+                estatura = 1.81f,
+                talla = 44f,
+                peso = 85.2f,
+                alergias = null,
+                edad = LocalDate.of(1990, 1, 19)
             )
         )
     )
