@@ -59,7 +59,7 @@ class SyncWorker(
                     estado = it.estado,
                     autorizadoPor = it.autorizadoPor,
                     aprobadoPor = it.aprobadoPor,
-                    fechaAprobacion = it.fechaAprobacion
+                    fechaAprobacion = it.aprobadoEn
                 )
             }
 
