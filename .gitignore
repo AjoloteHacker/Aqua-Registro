@@ -1,2 +1,28 @@
+<<<<<<< HEAD
 .idea
 MyApplication/.idea
+=======
+# Android y Gradle
+*.iml
+.gradle
+/local.properties
+.idea/
+.DS_Store
+/build
+captures/
+.externalNativeBuild
+.cxx
+
+# Claves de firma y credenciales seguras (Exigencia EA4 / EA5)
+*.jks
+*.keystore
+keystore.properties
+*.key
+signing/
+
+# Base de datos local H2 y logs
+backend-aquacheck/data/
+backend-aquacheck/target/
+backend-aquacheck/build/
+*.log
+>>>>>>> 29a1fb7457289bbcb447b7266be35ef4ea8897e3

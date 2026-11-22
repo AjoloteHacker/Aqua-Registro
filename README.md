@@ -67,9 +67,15 @@ graph TD
     subgraph Data ["Capa de Datos y Repositorio"]
         Repo["AquaRepository (Singleton Orquestador)"]
         NetMon["NetworkMonitor (ConnectivityManager)"]
-        RoomDB["AppDatabase (Room SQLite)"]
-        DAOs["DAOs (BuzoDao, FaenaDao, EmpresaDao, ChequeoDao)"]
-        Entities["Entities (BuzoEntity, FaenaEntity, EmpresaEntity, ChequeoEntity)"]
+        RoomDB["AppDatabase (Room SQLite Local)"]
+        DataStore["SessionDataStore (Preferences)"]
+        WorkMgr["SyncWorker (WorkManager en Segundo Plano)"]
+        RetrofitClient["RetrofitClient (HTTP Engine)"]
+    end
+
+    subgraph Backend ["Servicios Remotos"]
+        SpringBoot["AquaCheck Backend (Spring Boot 3.x + Swagger UI)"]
+        OpenMeteo["API Externa Meteorología Marítima (Open-Meteo)"]
     end
 
     Screens -->|Eventos de Usuario / Intents| VM
@@ -78,29 +84,38 @@ graph TD
     VM -->|Llamadas a Casos de Uso| Repo
     Repo -->|StateFlow Data Streams| VM
     Repo -->|Monitorea estado de red| NetMon
-    Repo -->|Lee / Escribe en SQLite| DAOs
-    DAOs -->|Mapea tablas SQLite| Entities
-    DAOs -->|Acceso a base de datos| RoomDB
+    Repo -->|Persistencia Local Inmediata| RoomDB
+    Repo -->|Preferencias y Sesión| DataStore
+    Repo -->|Consulta Clima Marítimo| RetrofitClient
+    RetrofitClient -->|Datos en tiempo real| OpenMeteo
+    NetMon -->|Reconexión de red detectada| WorkMgr
+    WorkMgr -->|Lee cola local en Room| RoomDB
+    WorkMgr -->|Sincronización Batch POST /api/sync/batch| SpringBoot
     Scaffold -->|Despliega Drawer y Notificaciones| Screens
 ```
 
 ### Componentes de la Arquitectura:
-1. **Modelos de Dominio (`data.model`):**
+1. **Modelos de Dominio y DTOs (`data.model` y `data.remote.dto`):**
    * [`Buzo`](MyApplication/app/src/main/java/com/example/myapplication/data/model/Buzo.kt): Entidad de dominio con matrícula DIRECTEMAR, RUT, empresa, categoría y estado de salud.
    * [`RegistroFaena`](MyApplication/app/src/main/java/com/example/myapplication/data/model/RegistroFaena.kt): Acta digital de inmersión y faena AST con control de pendientes.
    * [`EstadoSalud`](MyApplication/app/src/main/java/com/example/myapplication/data/model/EstadoSalud.kt): Enum con estados de aptitud (`APTO`, `NO_APTO`, `PENDIENTE`).
-   * [`EquipoChequeo`](MyApplication/app/src/main/java/com/example/myapplication/data/model/EquipoChequeo.kt): Checklist de los implementos técnicos obligatorios de buceo.
+   * [`RemoteDtos`](MyApplication/app/src/main/java/com/example/myapplication/data/remote/dto/RemoteDtos.kt): DTOs para comunicación con Spring Boot y API externa Open-Meteo.
 
 2. **Persistencia Local con Room SQLite (`data.local`):**
    * [`AppDatabase`](MyApplication/app/src/main/java/com/example/myapplication/data/local/AppDatabase.kt): Base de datos Room (`aqua_registro.db`) con pre-poblado inteligente.
    * [`BuzoEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/BuzoEntity.kt), [`FaenaEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/FaenaEntity.kt), [`EmpresaEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/EmpresaEntity.kt), [`ChequeoEntity`](MyApplication/app/src/main/java/com/example/myapplication/data/local/entity/ChequeoEntity.kt): Entidades con `@Entity` y claves primarias.
-   * [`BuzoDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/BuzoDao.kt), [`FaenaDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/FaenaDao.kt), [`EmpresaDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/EmpresaDao.kt), [`ChequeoDao`](MyApplication/app/src/main/java/com/example/myapplication/data/local/dao/ChequeoDao.kt): Métodos DAO con `@Insert`, `@Query`, `@Update`, `@Delete`.
+   * [`SessionDataStore`](MyApplication/app/src/main/java/com/example/myapplication/data/local/SessionDataStore.kt): Almacenamiento seguro de sesión y estado de sincronización con Jetpack DataStore.
 
-3. **Repositorio Central (`data.repository`):**
-   * [`AquaRepository`](MyApplication/app/src/main/java/com/example/myapplication/data/repository/AquaRepository.kt): Orquestador Singleton que alimenta los flujos `StateFlow` reactivos de la UI mientras persiste en segundo plano en Room SQLite.
+3. **Capa Remota y Sincronización Offline-First (`data.remote` y `util`):**
+   * [`RetrofitClient`](MyApplication/app/src/main/java/com/example/myapplication/data/remote/RetrofitClient.kt): Cliente HTTP para conectar con `AquaCheck Backend` (Spring Boot) y `Open-Meteo`.
+   * [`AquaApiService`](MyApplication/app/src/main/java/com/example/myapplication/data/remote/AquaApiService.kt): Endpoints REST de buzos, faenas, pre-chequeos, bitácoras y sincronización masiva.
+   * [`SyncWorker`](MyApplication/app/src/main/java/com/example/myapplication/util/SyncWorker.kt): Tarea en segundo plano con **WorkManager** que sube los cambios guardados en Room cuando se restablece la conexión.
 
-4. **ViewModels y StateFlow (`ui.viewmodels`):**
-   * [`MenuViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/MenuViewModel.kt): Desacopla la pantalla principal del repositorio y expone el estado de conectividad nativo.
+4. **Repositorio Central (`data.repository`):**
+   * [`AquaRepository`](MyApplication/app/src/main/java/com/example/myapplication/data/repository/AquaRepository.kt): Orquestador Singleton que alimenta los flujos `StateFlow` reactivos de la UI mientras persiste en segundo plano en Room SQLite y coordina la sincronización remota.
+
+5. **ViewModels y StateFlow (`ui.viewmodels`):**
+   * [`MenuViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/MenuViewModel.kt): Expone estado de conectividad, clima marítimo en tiempo real y disparador de sincronización.
    * [`AuthViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/AuthViewModel.kt), [`BuzoViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/BuzoViewModel.kt), [`EquiposViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/EquiposViewModel.kt), [`SaludViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/SaludViewModel.kt), [`TrabajoViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/TrabajoViewModel.kt), [`HistorialViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/HistorialViewModel.kt), [`EmpresaViewModel`](MyApplication/app/src/main/java/com/example/myapplication/ui/viewmodels/EmpresaViewModel.kt).
 
 ---
@@ -184,16 +199,20 @@ El avance de tareas, historias de usuario, asignación de responsabilidades y tr
 4. **Ejecutar la Aplicación:**
    * Seleccionar un emulador o dispositivo conectado.
    * Presionar el botón verde **Run 'app'** (`Shift + F10`).
-5. **Generar APK Debug desde línea de comandos:**
-   ```bash
-   cd MyApplication
-   ./gradlew assembleDebug
-   ```
-   * El APK generado se encuentra en: `MyApplication/app/build/outputs/apk/debug/app-debug.apk` (o `Aqua-Registro-debug.apk` en la raíz).
+5. **Generación y Firma Segura del APK Release (Exigencia EA4 / EA5):**
+   * **Desde línea de comandos:**
+     ```bash
+     cd MyApplication
+     ./gradlew assembleRelease
+     ```
+   * **Desde Android Studio:** Menú `Build` ➔ `Generate Signed Bundle / APK...` ➔ Seleccionar `APK` ➔ Cargar `release.jks` con alias `aquacheck` ➔ Seleccionar variante `release` y firmas V1/V2.
+   * **Ubicación del APK Release:** `MyApplication/app/build/outputs/apk/release/app-release.apk`.
+   * **Seguridad de Firma:** La configuración de firma se realiza de forma segura en `build.gradle.kts` a través de `signingConfigs` leyendo `keystore.properties` (o variables de entorno). Los archivos `*.jks` y `keystore.properties` están protegidos e ignorados en `.gitignore` para cumplir con las normas de confidencialidad de la evaluación.
 
 ---
 
 ##  Credenciales de Prueba para Evaluación
 * **RUT Prevencionista:** `12.345.678-5`
 * **Contraseña:** `admin123`
+* **Credenciales de Keystore:** Alias: `aquacheck` | Password: `AquaCheck2026!` *(Ver `keystore.properties.example`)*
 *(También es posible registrar un nuevo prevencionista en la pestaña "Nuevo Registro" con cualquier RUT chileno válido).*

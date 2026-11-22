@@ -18,6 +18,16 @@ class MenuViewModel(
     val buzos: StateFlow<List<Buzo>> = repository.buzos
     val faenas: StateFlow<List<RegistroFaena>> = repository.faenas
     val isNetworkConnected: StateFlow<Boolean> = repository.isNetworkConnected
+    val climaMaritimo: StateFlow<String> = repository.climaMaritimo
+    val syncStatus: StateFlow<String> = repository.syncStatus
+
+    fun sincronizarAhora() {
+        repository.sincronizarAhora()
+    }
+
+    fun actualizarClima(centro: String) {
+        repository.consultarClimaMaritimo(centro)
+    }
 
     fun logout() {
         repository.logout()

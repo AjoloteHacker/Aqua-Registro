@@ -20,9 +20,39 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val keystorePropertiesFile = rootProject.file("keystore.properties")
+            if (keystorePropertiesFile.exists()) {
+                val properties = java.util.Properties()
+                keystorePropertiesFile.inputStream().use { properties.load(it) }
+                val keystoreFile = rootProject.file(properties.getProperty("storeFile") ?: "release.jks")
+                if (keystoreFile.exists()) {
+                    storeFile = keystoreFile
+                    storePassword = properties.getProperty("storePassword")
+                    keyAlias = properties.getProperty("keyAlias")
+                    keyPassword = properties.getProperty("keyPassword")
+                }
+            } else {
+                // Configuración segura mediante variables de entorno para CI/CD y despliegue
+                val envKeystore = System.getenv("KEYSTORE_FILE")
+                if (envKeystore != null && rootProject.file(envKeystore).exists()) {
+                    storeFile = rootProject.file(envKeystore)
+                    storePassword = System.getenv("KEYSTORE_PASSWORD")
+                    keyAlias = System.getenv("KEY_ALIAS")
+                    keyPassword = System.getenv("KEY_PASSWORD")
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
+                signingConfig = releaseSigning
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -60,8 +90,21 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // Retrofit + Gson (Microservicios Spring Boot y API externa)
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // DataStore (Sesión y Preferencias)
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // WorkManager (Sincronización en segundo plano Offline-First)
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
     implementation(libs.espresso.core)
     testImplementation(libs.junit)
+    testImplementation("io.mockk:mockk:1.13.10")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
