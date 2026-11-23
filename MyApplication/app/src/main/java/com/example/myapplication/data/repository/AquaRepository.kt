@@ -27,11 +27,14 @@ import java.time.LocalDate
 import java.util.Date
 import java.util.Locale
 
-/** Clave del estado compartido de un equipo: (faenaId, equipoId). */
-typealias ClaveRevision = Pair<String, String>
+/** Clave del estado compartido de un equipo: (faenaId, buzoId, equipoId). */
+typealias ClaveRevision = Triple<String, String, String>
 
-/** Clave de la evidencia fotográfica de una etapa: (faenaId, etapa). */
-typealias ClaveEvidencia = Pair<String, EtapaComprobacion>
+/** Clave de la evidencia fotográfica: (faenaId, buzoId, etapa). */
+typealias ClaveEvidencia = Triple<String, String, EtapaComprobacion>
+
+/** Clave de una etapa confirmada: (faenaId, buzoId, etapa). */
+typealias ClaveEtapa = Triple<String, String, EtapaComprobacion>
 
 /** Pantalla a la que se pide llevar la revisión de una faena. */
 enum class DestinoRevision { EQUIPOS, SALUD }
@@ -176,10 +179,8 @@ class AquaRepository private constructor() {
     val evidenciasEquipos: StateFlow<Map<ClaveEvidencia, EvidenciaEquipos>> =
         _evidenciasEquipos.asStateFlow()
 
-    private val _etapasConfirmadas =
-        MutableStateFlow<Set<Pair<String, EtapaComprobacion>>>(emptySet())
-    val etapasConfirmadas: StateFlow<Set<Pair<String, EtapaComprobacion>>> =
-        _etapasConfirmadas.asStateFlow()
+    private val _etapasConfirmadas = MutableStateFlow<Set<ClaveEtapa>>(emptySet())
+    val etapasConfirmadas: StateFlow<Set<ClaveEtapa>> = _etapasConfirmadas.asStateFlow()
 
     // Encuestas de salud por faena y momento (ANTES / DESPUÉS)
     private val _encuestas =
@@ -296,6 +297,8 @@ class AquaRepository private constructor() {
                 id = "F-102",
                 buzoId = "3",
                 buzoNombre = "Rodrigo Mansilla Cárdenas",
+                socorristaId = "2",
+                socorristaNombre = "Pedro Almonacid Vera",
                 empresa = "Buceos del Sur S.A.",
                 centroCultivo = "Centro Chiloé Norte - Isla Lemuy",
                 tipoFaena = "Limpieza y retiro de bioincrustaciones en mallas",
@@ -501,9 +504,13 @@ class AquaRepository private constructor() {
         val buzo = _buzos.value.firstOrNull { it.id == buzoId }
             ?: return Result.failure(NoSuchElementException("Buzo no encontrado"))
 
-        val tieneFaenaEnCurso = _faenas.value.any {
-            (it.buzoId == buzoId || it.buzoNombre.equals(buzo.nombre, ignoreCase = true)) &&
-            it.enCurso
+        val tieneFaenaEnCurso = _faenas.value.any { faena ->
+            faena.enCurso && (
+                faena.buzoId == buzoId ||
+                    faena.socorristaId == buzoId ||
+                    faena.buzoNombre.equals(buzo.nombre, ignoreCase = true) ||
+                    faena.socorristaNombre.equals(buzo.nombre, ignoreCase = true)
+                )
         }
         if (tieneFaenaEnCurso) {
             return Result.failure(IllegalStateException("No es posible eliminar a ${buzo.nombre} porque tiene una faena en curso."))
@@ -563,30 +570,36 @@ class AquaRepository private constructor() {
         }
     }
 
-    // Revisiones y etapas: cada faena tiene su propio checklist, evidencia y etapas confirmadas.
-    // La evaluación individual se guarda UNA sola vez por (faena, equipo) y se comparte entre etapas.
-    fun obtenerRevisiones(faenaId: String): List<RevisionEquipo> =
+    // Revisiones y etapas: cada buzo de cada faena tiene su propio checklist, evidencia
+    // y etapas confirmadas. La evaluación individual se guarda UNA sola vez por
+    // (faena, buzo, equipo) y se comparte entre etapas.
+    fun obtenerRevisiones(faenaId: String, buzoId: String): List<RevisionEquipo> =
         _revisiones.value
-            .filterKeys { it.first == faenaId }
+            .filterKeys { it.first == faenaId && it.second == buzoId }
             .values
             .toList()
 
-    fun guardarRevision(faenaId: String, revision: RevisionEquipo) {
+    fun guardarRevision(faenaId: String, buzoId: String, revision: RevisionEquipo) {
         _revisiones.update { actual ->
-            actual + ((faenaId to revision.equipoId) to revision)
+            actual + (ClaveRevision(faenaId, buzoId, revision.equipoId) to revision)
         }
     }
 
-    fun obtenerEvidencia(faenaId: String, etapa: EtapaComprobacion): EvidenciaEquipos =
-        _evidenciasEquipos.value[faenaId to etapa] ?: EvidenciaEquipos()
+    fun obtenerEvidencia(
+        faenaId: String,
+        buzoId: String,
+        etapa: EtapaComprobacion
+    ): EvidenciaEquipos =
+        _evidenciasEquipos.value[ClaveEvidencia(faenaId, buzoId, etapa)] ?: EvidenciaEquipos()
 
     fun guardarFotoEvidencia(
         faenaId: String,
+        buzoId: String,
         etapa: EtapaComprobacion,
         tipo: TipoFotoEquipos,
         uri: String
     ) {
-        val clave = faenaId to etapa
+        val clave = ClaveEvidencia(faenaId, buzoId, etapa)
         _evidenciasEquipos.update { actual ->
             val anterior = actual[clave] ?: EvidenciaEquipos()
             actual + (clave to anterior.copy(
@@ -596,20 +609,24 @@ class AquaRepository private constructor() {
         }
     }
 
-    fun confirmarEtapa(faenaId: String, etapa: EtapaComprobacion) {
-        _etapasConfirmadas.update { it + (faenaId to etapa) }
+    fun confirmarEtapa(faenaId: String, buzoId: String, etapa: EtapaComprobacion) {
+        _etapasConfirmadas.update { it + ClaveEtapa(faenaId, buzoId, etapa) }
     }
 
-    fun etapaConfirmada(faenaId: String, etapa: EtapaComprobacion): Boolean =
-        (faenaId to etapa) in _etapasConfirmadas.value
+    fun etapaConfirmada(faenaId: String, buzoId: String, etapa: EtapaComprobacion): Boolean =
+        ClaveEtapa(faenaId, buzoId, etapa) in _etapasConfirmadas.value
 
     /**
-     * Catálogo de equipos del buzo de la faena + evaluación guardada de ESA faena.
+     * Catálogo de equipos de ESE buzo + evaluación guardada de ESA faena.
      * La misma evaluación se devuelve para ambas etapas (estado compartido/heredado).
      */
-    fun revisionesCombinadas(faena: RegistroFaena, etapa: EtapaComprobacion): List<RevisionEquipo> {
-        val guardadas = obtenerRevisiones(faena.id).associateBy { it.equipoId }
-        return obtenerEquiposParaBuzo(faena.buzoId).map { eq ->
+    fun revisionesCombinadas(
+        faena: RegistroFaena,
+        buzoId: String,
+        etapa: EtapaComprobacion
+    ): List<RevisionEquipo> {
+        val guardadas = obtenerRevisiones(faena.id, buzoId).associateBy { it.equipoId }
+        return obtenerEquiposParaBuzo(buzoId).map { eq ->
             guardadas[eq.id] ?: RevisionEquipo(
                 equipoId = eq.id,
                 categoria = "General",
@@ -619,29 +636,32 @@ class AquaRepository private constructor() {
         }
     }
 
-    /** Foto actual de la faena (salud del buzo + revisiones + evidencia + etapas confirmadas). */
+    /** Foto actual de la faena: un avance por buzo + la encuesta única de salud. */
     fun avanceDe(faena: RegistroFaena): AvanceFaena {
-        val etapas = EtapaComprobacion.entries.associateWith { etapa ->
-            revisionesCombinadas(faena, etapa)
+        val porBuzo = faena.asignaciones().associate { asignacion ->
+            val etapas = EtapaComprobacion.entries.associateWith { etapa ->
+                revisionesCombinadas(faena, asignacion.buzoId, etapa)
+            }
+            val confirmadas = _etapasConfirmadas.value
+                .filter { it.first == faena.id && it.second == asignacion.buzoId }
+                .map { it.third }
+                .toSet()
+            val evidencia = EtapaComprobacion.entries.associateWith { etapa ->
+                obtenerEvidencia(faena.id, asignacion.buzoId, etapa)
+            }
+            asignacion.buzoId to AvanceBuzo(
+                buzo = _buzos.value.firstOrNull { it.id == asignacion.buzoId },
+                etapas = etapas,
+                etapasConfirmadas = confirmadas,
+                evidencia = evidencia
+            )
         }
-        val confirmadas = _etapasConfirmadas.value
-            .filter { it.first == faena.id }
-            .map { it.second }
-            .toSet()
         val encuestasDeLaFaena = MomentoSalud.entries
             .mapNotNull { momento ->
                 _encuestas.value[faena.id to momento]?.let { momento to it }
             }
             .toMap()
-        return AvanceFaena(
-            buzo = _buzos.value.firstOrNull { it.id == faena.buzoId },
-            etapas = etapas,
-            etapasConfirmadas = confirmadas,
-            encuestas = encuestasDeLaFaena,
-            evidencia = EtapaComprobacion.entries.associateWith { etapa ->
-                obtenerEvidencia(faena.id, etapa)
-            }
-        )
+        return AvanceFaena(buzos = porBuzo, encuestas = encuestasDeLaFaena)
     }
 
     // Faenas e Inmersiones con persistencia Room
@@ -735,11 +755,18 @@ class AquaRepository private constructor() {
             registradaEn = obtenerFechaHoraActual()
         )
         _encuestas.update { it + ((faenaId to momento) to encuesta) }
-        actualizarSaludBuzo(
-            buzoId = faena.buzoId,
-            nuevoEstado = if (esApto) EstadoSalud.APTO else EstadoSalud.NO_APTO,
-            ultimoChequeo = "${momento.etiqueta} ($faenaId) - PA: $presionArterial mmHg, Pulso: $frecuenciaCardiaca lpm"
-        )
+        // La encuesta es única por faena, así que el dictamen se refleja en la ficha
+        // de los dos buzos asignados (ejecutor y socorrista).
+        listOf(faena.buzoId, faena.socorristaId)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .forEach { id ->
+                actualizarSaludBuzo(
+                    buzoId = id,
+                    nuevoEstado = if (esApto) EstadoSalud.APTO else EstadoSalud.NO_APTO,
+                    ultimoChequeo = "${momento.etiqueta} ($faenaId) - PA: $presionArterial mmHg, Pulso: $frecuenciaCardiaca lpm"
+                )
+            }
         return Result.success(encuesta)
     }
 

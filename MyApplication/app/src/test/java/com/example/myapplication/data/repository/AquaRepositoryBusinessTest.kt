@@ -4,6 +4,7 @@ import com.example.myapplication.data.model.Buzo
 import com.example.myapplication.data.model.EstadoEquipo
 import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.data.model.EtapaComprobacion
+import com.example.myapplication.data.model.MomentoSalud
 import com.example.myapplication.data.model.Prevencionista
 import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.data.model.RevisionEquipo
@@ -83,6 +84,14 @@ class AquaRepositoryBusinessTest {
     }
 
     @Test
+    fun eliminarBuzo_siendoSocorristaEnFaenaEnCurso_retornaFallo() {
+        // Pedro Almonacid (ID 2) es el socorrista de F-102
+        val resultado = repository.eliminarBuzo("2")
+        assertTrue(resultado.isFailure)
+        assertTrue(resultado.exceptionOrNull()?.message?.contains("faena en curso") == true)
+    }
+
+    @Test
     fun agregarEmpresa_nombreValido_agregaExitosamente() {
         val nueva = "Austral Diving Safety Ltda"
         val resultado = repository.agregarEmpresa(nueva)
@@ -101,6 +110,7 @@ class AquaRepositoryBusinessTest {
         val faena = faenaDePruebaEquipos()
         repository.guardarRevision(
             faena.id,
+            faena.buzoId,
             RevisionEquipo(
                 equipoId = "e1",
                 categoria = "General",
@@ -110,11 +120,32 @@ class AquaRepositoryBusinessTest {
             )
         )
 
-        val pre = repository.revisionesCombinadas(faena, EtapaComprobacion.PRE_EQUIPACION)
-        val equipado = repository.revisionesCombinadas(faena, EtapaComprobacion.EQUIPADO)
+        val pre = repository.revisionesCombinadas(faena, faena.buzoId, EtapaComprobacion.PRE_EQUIPACION)
+        val equipado = repository.revisionesCombinadas(faena, faena.buzoId, EtapaComprobacion.EQUIPADO)
 
         assertEquals(EstadoEquipo.ACEPTABLE, pre.first { it.equipoId == "e1" }.estado)
         assertEquals(EstadoEquipo.ACEPTABLE, equipado.first { it.equipoId == "e1" }.estado)
+    }
+
+    @Test
+    fun estadoDelEquipoEsIndependientePorBuzo() {
+        val faena = faenaDePruebaEquipos()
+        repository.guardarRevision(
+            faena.id,
+            faena.buzoId,
+            RevisionEquipo("e1", "General", "Traje de buceo", "Estanco", EstadoEquipo.ACEPTABLE)
+        )
+        repository.guardarRevision(
+            faena.id,
+            faena.socorristaId,
+            RevisionEquipo("e1", "General", "Traje de buceo", "Estanco", EstadoEquipo.INUTILIZABLE)
+        )
+
+        val ejecutor = repository.revisionesCombinadas(faena, faena.buzoId, EtapaComprobacion.PRE_EQUIPACION)
+        val socorrista = repository.revisionesCombinadas(faena, faena.socorristaId, EtapaComprobacion.PRE_EQUIPACION)
+
+        assertEquals(EstadoEquipo.ACEPTABLE, ejecutor.first { it.equipoId == "e1" }.estado)
+        assertEquals(EstadoEquipo.INUTILIZABLE, socorrista.first { it.equipoId == "e1" }.estado)
     }
 
     @Test
@@ -123,21 +154,60 @@ class AquaRepositoryBusinessTest {
         val pre = EtapaComprobacion.PRE_EQUIPACION
         val equipado = EtapaComprobacion.EQUIPADO
 
-        repository.guardarFotoEvidencia(faena.id, pre, TipoFotoEquipos.GENERAL, "content://media/general.jpg")
-        repository.guardarFotoEvidencia(faena.id, equipado, TipoFotoEquipos.FRENTE, "content://media/frente.jpg")
+        repository.guardarFotoEvidencia(faena.id, faena.buzoId, pre, TipoFotoEquipos.GENERAL, "content://media/general.jpg")
+        repository.guardarFotoEvidencia(faena.id, faena.buzoId, equipado, TipoFotoEquipos.FRENTE, "content://media/frente.jpg")
 
-        val evidenciaPre = repository.obtenerEvidencia(faena.id, pre)
-        val evidenciaEquipado = repository.obtenerEvidencia(faena.id, equipado)
+        val evidenciaPre = repository.obtenerEvidencia(faena.id, faena.buzoId, pre)
+        val evidenciaEquipado = repository.obtenerEvidencia(faena.id, faena.buzoId, equipado)
 
         assertTrue(evidenciaPre.estaCompleta(pre))
         assertEquals(listOf(TipoFotoEquipos.ATRAS), evidenciaEquipado.faltan(equipado))
         assertNull(evidenciaPre.fotos[TipoFotoEquipos.FRENTE])
     }
 
+    @Test
+    fun evidenciaFotograficaEsIndependientePorBuzo() {
+        val faena = faenaDePruebaEquipos()
+        val etapa = EtapaComprobacion.PRE_EQUIPACION
+
+        repository.guardarFotoEvidencia(faena.id, faena.buzoId, etapa, TipoFotoEquipos.GENERAL, "content://media/ejecutor.jpg")
+
+        assertTrue(repository.obtenerEvidencia(faena.id, faena.buzoId, etapa).estaCompleta(etapa))
+        assertFalse(repository.obtenerEvidencia(faena.id, faena.socorristaId, etapa).estaCompleta(etapa))
+    }
+
+    @Test
+    fun avanceDeIncluyeAmbosBuzosYUnaSolaEncuestaPorMomento() {
+        val faena = faenaDePruebaEquipos()
+        repository.autorizarFaena(faena)
+        assertTrue(repository.registrarEncuestaSalud(faena.id, MomentoSalud.ANTES, true, "120/80", 72).isSuccess)
+
+        val avance = repository.avanceDe(faena)
+
+        assertEquals(setOf(faena.buzoId, faena.socorristaId), avance.buzos.keys)
+        assertTrue(avance.buzos.values.all { it.buzo != null })
+        // Aunque haya dos buzos, la encuesta se registra una sola vez por faena y momento.
+        assertEquals(1, avance.encuestas.size)
+        assertTrue(MomentoSalud.ANTES in avance.encuestas)
+    }
+
+    @Test
+    fun confirmarEtapaEsIndependientePorBuzo() {
+        val faena = faenaDePruebaEquipos()
+        val etapa = EtapaComprobacion.PRE_EQUIPACION
+
+        repository.confirmarEtapa(faena.id, faena.buzoId, etapa)
+
+        assertTrue(repository.etapaConfirmada(faena.id, faena.buzoId, etapa))
+        assertFalse(repository.etapaConfirmada(faena.id, faena.socorristaId, etapa))
+    }
+
     private fun faenaDePruebaEquipos() = RegistroFaena(
         id = "F-TEST-EQUIPOS",
-        buzoId = "B-TEST-EQUIPOS",
-        buzoNombre = "Buzo de prueba",
+        buzoId = "1",
+        buzoNombre = "Carlos Soto Paredes",
+        socorristaId = "2",
+        socorristaNombre = "Pedro Almonacid Vera",
         empresa = "AquaTest",
         centroCultivo = "Centro de prueba",
         tipoFaena = "Inspección",

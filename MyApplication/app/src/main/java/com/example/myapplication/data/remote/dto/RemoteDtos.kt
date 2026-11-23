@@ -24,6 +24,8 @@ data class FaenaDto(
     @SerializedName("id") val id: String,
     @SerializedName("buzoId") val buzoId: String,
     @SerializedName("buzoNombre") val buzoNombre: String,
+    @SerializedName("socorristaId") val socorristaId: String = "",
+    @SerializedName("socorristaNombre") val socorristaNombre: String = "",
     @SerializedName("empresa") val empresa: String?,
     @SerializedName("centroCultivo") val centroCultivo: String?,
     @SerializedName("tipoFaena") val tipoFaena: String?,

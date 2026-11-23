@@ -117,6 +117,7 @@ fun EquiposScreen(
         ChecklistEquiposContent(
             uiState = uiState,
             onSeleccionarFaena = viewModel::seleccionarFaena,
+            onSeleccionarBuzo = viewModel::seleccionarBuzo,
             onSeleccionarEtapa = viewModel::seleccionarEtapa,
             onEstadoChange = viewModel::actualizarEstado,
             onDescripcionChange = viewModel::actualizarDescripcion,
@@ -136,6 +137,7 @@ fun EquiposScreen(
 fun ChecklistEquiposContent(
     uiState: EquiposUiState,
     onSeleccionarFaena: (String) -> Unit,
+    onSeleccionarBuzo: (Int) -> Unit,
     onSeleccionarEtapa: (EtapaComprobacion) -> Unit,
     onEstadoChange: (equipoId: String, EstadoEquipo) -> Unit,
     onDescripcionChange: (equipoId: String, String) -> Unit,
@@ -191,6 +193,14 @@ fun ChecklistEquiposContent(
 
         Spacer(Modifier.height(10.dp))
 
+        // Captura seguida: sin selector de rol, se muestra quién se está registrando.
+        BuzoActualBanner(
+            uiState = uiState,
+            onVolverAlEjecutor = { onSeleccionarBuzo(0) }
+        )
+
+        Spacer(Modifier.height(10.dp))
+
         // Faenas en curso
         Text("Faena en curso", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AquaTextPrimary)
         Spacer(Modifier.height(4.dp))
@@ -207,7 +217,9 @@ fun ChecklistEquiposContent(
                         )
                     },
                     label = {
-                        Text("${faena.id} · ${faena.buzoNombre} (${faena.equiposCompletos}/${faena.totalEquipos})")
+                        val secundario = faena.socorristaNombre.takeIf { it.isNotBlank() }
+                            ?.let { " · + $it" } ?: ""
+                        Text("${faena.id} · ${faena.buzoNombre}$secundario (${faena.equiposCompletos}/${faena.totalEquipos})")
                     }
                 )
             }
@@ -284,6 +296,65 @@ fun ChecklistEquiposContent(
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
+        }
+    }
+}
+
+// ───────────────────────── Buzo que se está registrando ─────────────────────────
+
+@Composable
+private fun BuzoActualBanner(
+    uiState: EquiposUiState,
+    onVolverAlEjecutor: () -> Unit
+) {
+    val buzo = uiState.buzoActual
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.ScubaDiving,
+                    contentDescription = null,
+                    tint = AquaPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Buzo ${uiState.indiceBuzo + 1} de ${uiState.tripulacion.size} · ${buzo?.rol?.etiqueta ?: "Sin tripulación"}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = AquaPrimary
+                    )
+                    Text(
+                        text = buzo?.buzoNombre ?: "Asigne la tripulación en Registro de Faena",
+                        fontSize = 12.sp,
+                        color = AquaTextPrimary
+                    )
+                }
+                if (uiState.ambosCompletos) {
+                    Surface(
+                        color = SafetyCardBgSuccess,
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "Ambos completos",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SafetySuccess,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+            if (uiState.indiceBuzo > 0) {
+                TextButton(onClick = onVolverAlEjecutor) {
+                    Text("Volver al ejecutor", fontSize = 12.sp)
+                }
+            }
         }
     }
 }

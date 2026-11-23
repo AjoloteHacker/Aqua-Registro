@@ -2,6 +2,7 @@ package com.example.myapplication.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.model.AsignacionBuzo
 import com.example.myapplication.data.model.EstadoEquipo
 import com.example.myapplication.data.model.EtapaComprobacion
 import com.example.myapplication.data.model.EvidenciaEquipos
@@ -22,6 +23,7 @@ import kotlinx.coroutines.launch
 data class FaenaRevision(
     val id: String,
     val buzoNombre: String,
+    val socorristaNombre: String = "",
     val tipoFaena: String,
     val equiposCompletos: Int,
     val totalEquipos: Int
@@ -30,11 +32,20 @@ data class FaenaRevision(
 data class EquiposUiState(
     val faenas: List<FaenaRevision> = emptyList(),
     val faenaSeleccionadaId: String? = null,
+    /** Tripulación de la faena, en orden: 0 ejecutor, 1 socorrista. */
+    val tripulacion: List<AsignacionBuzo> = emptyList(),
+    /** Índice de [tripulacion] que se está registrando en este momento. */
+    val indiceBuzo: Int = 0,
     val etapa: EtapaComprobacion = EtapaComprobacion.PRE_EQUIPACION,
     val equipos: List<RevisionEquipo> = emptyList(),
     val evidencia: EvidenciaEquipos = EvidenciaEquipos(),
+    val etapaConfirmada: Boolean = false,
+    /** Las cuatro combinaciones de buzo × etapa están confirmadas. */
+    val ambosCompletos: Boolean = false,
     val userMessage: String? = null
 ) {
+    val buzoActual: AsignacionBuzo? get() = tripulacion.getOrNull(indiceBuzo)
+    val esUltimoBuzo get() = tripulacion.isNotEmpty() && indiceBuzo == tripulacion.lastIndex
     val aceptables get() = equipos.count { it.estado == EstadoEquipo.ACEPTABLE }
     val riesgosos get() = equipos.count { it.estado == EstadoEquipo.UTILIZABLE_RIESGOSO }
     val inutilizables get() = equipos.count { it.estado == EstadoEquipo.INUTILIZABLE }
@@ -42,18 +53,22 @@ data class EquiposUiState(
     val completos get() = equipos.count { it.evaluacionCompleta }
     val fotosFaltantes get() = evidencia.faltan(etapa)
     val fotoCompleta get() = evidencia.estaCompleta(etapa)
+    /** Evaluación + evidencia del buzo y etapa actuales, listos para confirmar. */
     val todoCompleto get() = equipos.isNotEmpty() && completos == equipos.size && fotoCompleta
 }
 
 // ───────────────────────── ViewModel ─────────────────────────
 
 /**
- * Control de equipos por FAENA: cada faena en curso tiene su propio checklist,
- * evidencia y etapas confirmadas (no se heredan de faenas anteriores del mismo buzo).
+ * Control de equipos por FAENA y BUZO: cada buzo de cada faena en curso tiene su
+ * propio checklist, evidencia y etapas confirmadas.
  *
- * La evaluación individual se comparte entre Pre-equipación y Equipado: se guarda
- * una sola vez por (faena, equipo). La evidencia fotográfica sí es por etapa:
- * una foto general en Pre-equipación y frente/atrás en Equipado.
+ * La captura es seguida, sin selector: primero se registran las dos etapas del
+ * ejecutor y, al confirmar «Equipado», se pasa automáticamente a la Pre-equipación
+ * del socorrista. Se puede volver al ejecutor para corregir.
+ *
+ * La evaluación individual se comparte entre Pre-equipación y Equipado de un mismo
+ * buzo; la evidencia fotográfica sí es por etapa.
  */
 class EquiposViewModel(
     private val repository: AquaRepository = AquaRepository.getInstance()
@@ -87,7 +102,20 @@ class EquiposViewModel(
     }
 
     fun seleccionarFaena(faenaId: String) {
-        _uiState.update { it.copy(faenaSeleccionadaId = faenaId, userMessage = null) }
+        _uiState.update {
+            it.copy(
+                faenaSeleccionadaId = faenaId,
+                indiceBuzo = 0,
+                etapa = EtapaComprobacion.PRE_EQUIPACION,
+                userMessage = null
+            )
+        }
+        recargar()
+    }
+
+    /** Permite volver al ejecutor para corregir sin perder lo ya registrado. */
+    fun seleccionarBuzo(indice: Int) {
+        _uiState.update { it.copy(indiceBuzo = indice, userMessage = null) }
         recargar()
     }
 
@@ -110,33 +138,60 @@ class EquiposViewModel(
     fun registrarFoto(tipo: TipoFotoEquipos, uri: String) {
         val s = _uiState.value
         val faenaId = s.faenaSeleccionadaId ?: return
-        repository.guardarFotoEvidencia(faenaId, s.etapa, tipo, uri)
+        val buzoId = s.buzoActual?.buzoId ?: return
+        repository.guardarFotoEvidencia(faenaId, buzoId, s.etapa, tipo, uri)
         recargar()
     }
 
     /** Todo ya está persistido; esto solo informa al usuario del estado del avance. */
     fun guardarAvance() {
         val s = _uiState.value
-        val faena = faenasEnCurso.firstOrNull { it.id == s.faenaSeleccionadaId }
-        val etiqueta = faena?.let { "${it.id} (${it.buzoNombre})" } ?: "la faena"
+        val etiqueta = s.buzoActual?.let { "${it.rol.etiqueta}: ${it.buzoNombre}" } ?: "la faena"
         val evidencia = if (s.fotoCompleta) "evidencia completa" else "fotos pendientes"
         _uiState.update {
             it.copy(
                 userMessage = "Avance de $etiqueta guardado (${s.completos}/${s.equipos.size} equipos evaluados, " +
-                        "$evidencia en ${s.etapa.etiqueta}). Debes completar el resto más tarde."
+                    "$evidencia en ${s.etapa.etiqueta}). Debes completar el resto más tarde."
             )
         }
     }
 
+    /**
+     * Confirma la etapa del buzo actual. Al terminar EQUIPADO del ejecutor se pasa
+     * automáticamente a la Pre-equipación del socorrista (captura seguida).
+     */
     fun confirmarEtapa() {
         val s = _uiState.value
         val faenaId = s.faenaSeleccionadaId ?: return
+        val buzo = s.buzoActual ?: return
         if (!s.todoCompleto) {
             _uiState.update { it.copy(userMessage = "Faltan evaluaciones o fotos por completar.") }
             return
         }
-        repository.confirmarEtapa(faenaId, s.etapa)
-        _uiState.update { it.copy(userMessage = "${s.etapa.etiqueta} confirmada.") }
+        repository.confirmarEtapa(faenaId, buzo.buzoId, s.etapa)
+
+        val mensaje = when {
+            // Última etapa del ejecutor: sigue el socorrista, sin selector.
+            s.etapa == EtapaComprobacion.EQUIPADO && !s.esUltimoBuzo -> {
+                _uiState.update {
+                    it.copy(
+                        indiceBuzo = it.indiceBuzo + 1,
+                        etapa = EtapaComprobacion.PRE_EQUIPACION
+                    )
+                }
+                "${buzo.rol.etiqueta} completado. Ahora registra la Pre-equipación del socorrista."
+            }
+            s.esUltimoBuzo && s.tripulacion.size > 1 ->
+                "Ambos buzos completos. Ya puede revisar la encuesta de salud."
+            s.esUltimoBuzo ->
+                "Buzo ejecutor completado. Ya puede revisar la encuesta de salud."
+            else -> "${s.etapa.etiqueta} confirmada para ${buzo.rol.etiqueta}."
+        }
+        if (s.etapa != EtapaComprobacion.EQUIPADO) {
+            _uiState.update { it.copy(etapa = EtapaComprobacion.EQUIPADO) }
+        }
+        recargar()
+        _uiState.update { it.copy(userMessage = mensaje) }
     }
 
     fun clearUserMessage() {
@@ -148,30 +203,56 @@ class EquiposViewModel(
     private fun modificar(equipoId: String, cambio: (RevisionEquipo) -> RevisionEquipo) {
         val s = _uiState.value
         val faenaId = s.faenaSeleccionadaId ?: return
+        val buzoId = s.buzoActual?.buzoId ?: return
         val actual = s.equipos.firstOrNull { it.equipoId == equipoId } ?: return
-        repository.guardarRevision(faenaId, cambio(actual)) // se guarda al instante (estado compartido)
+        repository.guardarRevision(faenaId, buzoId, cambio(actual)) // se guarda al instante
         recargar()
     }
 
     private fun recargar() {
         val s = _uiState.value
         val faenas = faenasEnCurso.map { f ->
-            val items = repository.revisionesCombinadas(f, s.etapa)
+            val items = repository.revisionesCombinadas(f, f.buzoId, s.etapa)
             FaenaRevision(
-                f.id,
-                f.buzoNombre,
-                f.tipoFaena,
-                items.count { it.evaluacionCompleta },
-                items.size
+                id = f.id,
+                buzoNombre = f.buzoNombre,
+                socorristaNombre = f.socorristaNombre,
+                tipoFaena = f.tipoFaena,
+                equiposCompletos = items.count { it.evaluacionCompleta },
+                totalEquipos = items.size
             )
         }
         val seleccionada = faenasEnCurso.firstOrNull { it.id == s.faenaSeleccionadaId }
-        val equipos = seleccionada
-            ?.let { repository.revisionesCombinadas(it, s.etapa) }
+        val tripulacion = seleccionada?.asignaciones().orEmpty()
+        // Si la faena aún no tiene socorrista o se cambió de faena, el índice debe ser válido.
+        val indice = s.indiceBuzo.coerceIn(0, (tripulacion.size - 1).coerceAtLeast(0))
+        val buzoId = tripulacion.getOrNull(indice)?.buzoId
+        val equipos = buzoId
+            ?.let { repository.revisionesCombinadas(requireNotNull(seleccionada), it, s.etapa) }
             ?: emptyList()
-        val evidencia = seleccionada
-            ?.let { repository.obtenerEvidencia(it.id, s.etapa) }
+        val evidencia = buzoId
+            ?.let { repository.obtenerEvidencia(requireNotNull(seleccionada).id, it, s.etapa) }
             ?: EvidenciaEquipos()
-        _uiState.update { it.copy(faenas = faenas, equipos = equipos, evidencia = evidencia) }
+        val confirmada = buzoId?.let {
+            repository.etapaConfirmada(requireNotNull(seleccionada).id, it, s.etapa)
+        } ?: false
+        val ambosCompletos = seleccionada?.let { faena ->
+            faena.asignaciones().all { asignacion ->
+                EtapaComprobacion.entries.all { etapa ->
+                    repository.etapaConfirmada(faena.id, asignacion.buzoId, etapa)
+                }
+            }
+        } ?: false
+        _uiState.update {
+            it.copy(
+                faenas = faenas,
+                tripulacion = tripulacion,
+                indiceBuzo = indice,
+                equipos = equipos,
+                evidencia = evidencia,
+                etapaConfirmada = confirmada,
+                ambosCompletos = ambosCompletos
+            )
+        }
     }
 }

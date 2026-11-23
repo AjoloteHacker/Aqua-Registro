@@ -37,6 +37,7 @@ data class HistorialUiState(
         get() = faenas.filter { faena ->
             val coincideTexto = searchQuery.isBlank() ||
                     faena.buzoNombre.contains(searchQuery, ignoreCase = true) ||
+                    faena.socorristaNombre.contains(searchQuery, ignoreCase = true) ||
                     faena.centroCultivo.contains(searchQuery, ignoreCase = true) ||
                     faena.tipoFaena.contains(searchQuery, ignoreCase = true) ||
                     faena.empresa.contains(searchQuery, ignoreCase = true) ||

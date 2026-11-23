@@ -20,7 +20,7 @@ import com.example.myapplication.data.local.entity.FaenaEntity
  */
 @Database(
     entities = [BuzoEntity::class, FaenaEntity::class, EmpresaEntity::class, ChequeoEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -85,6 +85,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Faenas con dos buzos: ejecutor + socorrista (buzo secundario). */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `faenas` ADD COLUMN `socorristaId` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `faenas` ADD COLUMN `socorristaNombre` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -95,7 +103,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "aqua_registro.db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     // Solo se usa si la BD instalada es anterior a la versión 3 (no hay ruta de migración).
                     .fallbackToDestructiveMigration()
                     .build()

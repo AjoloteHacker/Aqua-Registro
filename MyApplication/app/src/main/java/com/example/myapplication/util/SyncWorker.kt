@@ -50,6 +50,8 @@ class SyncWorker(
                     id = it.id,
                     buzoId = it.buzoId,
                     buzoNombre = it.buzoNombre,
+                    socorristaId = it.socorristaId,
+                    socorristaNombre = it.socorristaNombre,
                     empresa = it.empresa,
                     centroCultivo = it.centroCultivo,
                     tipoFaena = it.tipoFaena,

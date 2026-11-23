@@ -8,6 +8,7 @@ class RegistroFaenaRulesTest {
 
     private lateinit var faenaBase: RegistroFaena
     private lateinit var buzoTest: Buzo
+    private lateinit var socorristaTest: Buzo
 
     @Before
     fun setUp() {
@@ -20,11 +21,18 @@ class RegistroFaenaRulesTest {
             telefono = "+56 9 8451 2290",
             estadoSalud = EstadoSalud.APTO
         )
-
+        socorristaTest = buzoTest.copy(
+            id = "B-2",
+            rut = "17.912.453-K",
+            nombre = "Pedro Almonacid Vera",
+            matricula = "Buzo Básico N° 5812"
+        )
         faenaBase = RegistroFaena(
             id = "F-100",
             buzoId = "B-1",
             buzoNombre = "Carlos Soto Paredes",
+            socorristaId = "B-2",
+            socorristaNombre = "Pedro Almonacid Vera",
             empresa = "Servicios Submarinos Austral SpA",
             centroCultivo = "Centro Melinka 1",
             tipoFaena = "Inspección de redes",
@@ -37,16 +45,30 @@ class RegistroFaenaRulesTest {
 
     @Test
     fun faenaSinBuzo_generaPendienteDeDatos() {
-        val avanceSinBuzo = AvanceFaena(
-            buzo = null,
-            etapas = emptyMap(),
-            etapasConfirmadas = emptySet(),
-            encuestas = emptyMap()
-        )
+        val avanceSinBuzo = avance(ejecutor = avanceBuzo(buzo = null))
 
         val pendientes = faenaBase.pendientes(avanceSinBuzo)
         assertTrue(pendientes.any { it.categoria == CategoriaPendiente.DATOS && it.detalle.contains("no encontrado") })
         assertFalse(faenaBase.puedeFinalizar(avanceSinBuzo))
+    }
+
+    @Test
+    fun faenaSinSocorristaAsignado_bloqueaCierre() {
+        val faenaSinSocorrista = faenaBase.copy(socorristaId = "", socorristaNombre = "")
+        val avanceCompleto = avance(socorrista = null) // solo se registra el ejecutor
+
+        val pendientes = faenaSinSocorrista.pendientes(avanceCompleto)
+        assertTrue(pendientes.any { it.detalle.contains("falta asignar el buzo secundario") })
+        assertFalse(faenaSinSocorrista.puedeFinalizar(avanceCompleto))
+    }
+
+    @Test
+    fun socorristaIgualAlEjecutor_bloqueaCierre() {
+        val repetida = faenaBase.copy(socorristaId = "B-1", socorristaNombre = buzoTest.nombre)
+
+        val pendientes = repetida.pendientes(avance())
+        assertTrue(pendientes.any { it.detalle.contains("debe ser distinto") })
+        assertFalse(repetida.puedeFinalizar(avance()))
     }
 
     @Test
@@ -59,80 +81,78 @@ class RegistroFaenaRulesTest {
             // sin estado, sin foto
         )
 
-        val avanceConPendientes = AvanceFaena(
-            buzo = buzoTest,
-            etapas = mapOf(EtapaComprobacion.PRE_EQUIPACION to listOf(equipoSinRevisar)),
-            etapasConfirmadas = emptySet(),
-            encuestas = emptyMap()
+        val avanceConPendientes = avance(
+            ejecutor = avanceBuzo(
+                buzo = buzoTest,
+                revisiones = mapOf(EtapaComprobacion.PRE_EQUIPACION to listOf(equipoSinRevisar)),
+                confirmadas = emptySet(),
+                evidencia = emptyMap()
+            )
         )
 
         val pendientes = faenaBase.pendientes(avanceConPendientes)
-        assertTrue(pendientes.any { it.categoria == CategoriaPendiente.EQUIPOS })
+        assertTrue(pendientes.any { it.categoria == CategoriaPendiente.EQUIPOS && it.detalle.contains("Buzo ejecutor") })
         assertFalse(faenaBase.puedeFinalizar(avanceConPendientes))
     }
 
     @Test
+    fun socorristaIncompleto_bloqueaCierreAunqueEjecutorEsteCompleto() {
+        val incompleto = avanceBuzo(
+            buzo = socorristaTest,
+            revisiones = emptyMap(),
+            confirmadas = emptySet(),
+            evidencia = emptyMap()
+        )
+
+        val pendientes = faenaBase.pendientes(avance(socorrista = incompleto))
+        assertTrue(pendientes.any { it.detalle.contains("Socorrista") })
+        assertFalse(faenaBase.puedeFinalizar(avance(socorrista = incompleto)))
+    }
+
+    @Test
     fun encuestaAntesNoApto_bloqueaCierreDeFaena() {
-        val encuestaNoApto = EncuestaSalud(
-            faenaId = "F-100",
-            momento = MomentoSalud.ANTES,
-            esApto = false, // Buzo no apto antes de sumergirse
+        val encuestaNoApto = crearEncuestaApto(MomentoSalud.ANTES).copy(
+            esApto = false,
             presionArterial = "150/95",
-            frecuenciaCardiaca = 110,
-            registradaPor = "Supervisor",
-            registradaEn = "21/11/2026 08:45"
+            frecuenciaCardiaca = 110
         )
 
-        val avanceConNoApto = AvanceFaena(
-            buzo = buzoTest,
-            etapas = emptyMap(),
-            etapasConfirmadas = emptySet(),
-            encuestas = mapOf(MomentoSalud.ANTES to encuestaNoApto)
+        val pendientes = faenaBase.pendientes(
+            avance(encuestas = mapOf(MomentoSalud.ANTES to encuestaNoApto))
         )
-
-        val pendientes = faenaBase.pendientes(avanceConNoApto)
         assertTrue(pendientes.any { it.categoria == CategoriaPendiente.SALUD && it.detalle.contains("NO APTO") })
+        assertTrue(pendientes.any { it.detalle.contains(socorristaTest.nombre) }) // aplica a ambos buzos
     }
 
     @Test
     fun faenaSinAprobacionPrevencionista_bloqueaCierre() {
-        val avanceValido = AvanceFaena(
-            buzo = buzoTest,
-            etapas = EtapaComprobacion.entries.associateWith { listOf(crearRevisionConforme("eq1")) },
-            etapasConfirmadas = EtapaComprobacion.entries.toSet(),
-            encuestas = mapOf(
-                MomentoSalud.ANTES to crearEncuestaApto(MomentoSalud.ANTES),
-                MomentoSalud.DESPUES to crearEncuestaApto(MomentoSalud.DESPUES)
-            ),
-            evidencia = evidenciaCompleta()
-        )
-
-        // faenaBase NO tiene aprobacion
         assertFalse(faenaBase.datosAprobados)
-        val pendientes = faenaBase.pendientes(avanceValido)
+        val pendientes = faenaBase.pendientes(avance())
         assertTrue(pendientes.any { it.detalle.contains("falta la aprobación") })
-        assertFalse(faenaBase.puedeFinalizar(avanceValido))
+        assertFalse(faenaBase.puedeFinalizar(avance()))
     }
 
     @Test
     fun faenaConTodosRequisitosCompletos_puedeFinalizarConExito() {
         val faenaAprobada = faenaBase.aprobar("Cristóbal Loncón", "21/11/2026 10:00").getOrThrow()
-
-        val avanceCompleto = AvanceFaena(
-            buzo = buzoTest,
-            etapas = EtapaComprobacion.entries.associateWith { listOf(crearRevisionConforme("eq1")) },
-            etapasConfirmadas = EtapaComprobacion.entries.toSet(),
-            encuestas = mapOf(
-                MomentoSalud.ANTES to crearEncuestaApto(MomentoSalud.ANTES),
-                MomentoSalud.DESPUES to crearEncuestaApto(MomentoSalud.DESPUES)
-            ),
-            evidencia = evidenciaCompleta()
-        )
+        val avanceCompleto = avance()
 
         assertTrue(faenaAprobada.puedeFinalizar(avanceCompleto))
         val resultado = faenaAprobada.finalizar(avanceCompleto)
         assertTrue(resultado.isSuccess)
         assertEquals(RegistroFaena.ESTADO_COMPLETADA, resultado.getOrNull()?.estado)
+    }
+
+    @Test
+    fun encuestaUnicaPorFaena_noGeneraPendientesDuplicadosPorBuzo() {
+        val faenaAprobada = faenaBase.aprobar("Cristóbal Loncón", "21/11/2026 10:00").getOrThrow()
+
+        val encuestas = avance().encuestas
+        val salud = faenaAprobada.pendientes(avance()).filter { it.categoria == CategoriaPendiente.SALUD }
+        assertTrue(salud.isEmpty())
+        // Una encuesta por momento (ANTES y DESPUÉS), nunca una por buzo.
+        assertEquals(2, encuestas.size)
+        assertEquals(MomentoSalud.entries.toSet(), encuestas.keys)
     }
 
     @Test
@@ -145,98 +165,134 @@ class RegistroFaenaRulesTest {
             estado = EstadoEquipo.UTILIZABLE_RIESGOSO
         )
 
-        val avance = AvanceFaena(
-            buzo = buzoTest,
-            etapas = mapOf(EtapaComprobacion.PRE_EQUIPACION to listOf(revisionRiesgosa)),
-            etapasConfirmadas = setOf(EtapaComprobacion.PRE_EQUIPACION),
+        val avanceConRiesgo = avance(
+            ejecutor = avanceBuzo(
+                buzo = buzoTest,
+                revisiones = mapOf(EtapaComprobacion.PRE_EQUIPACION to listOf(revisionRiesgosa)),
+                confirmadas = setOf(EtapaComprobacion.PRE_EQUIPACION),
+                evidencia = emptyMap()
+            ),
+            socorrista = avanceBuzo(
+                buzo = socorristaTest,
+                revisiones = mapOf(EtapaComprobacion.PRE_EQUIPACION to listOf(revisionRiesgosa)),
+                confirmadas = setOf(EtapaComprobacion.PRE_EQUIPACION),
+                evidencia = emptyMap()
+            ),
             encuestas = emptyMap()
         )
 
-        val novedades = faenaBase.novedades(avance)
-        assertEquals(1, novedades.size)
-        assertTrue(novedades.first().contains("Regulador alternativo"))
+        val novedades = faenaBase.novedades(avanceConRiesgo)
+        assertEquals(2, novedades.count { it.contains("Regulador alternativo") })
+        assertTrue(novedades.any { it.contains("Buzo ejecutor") })
+        assertTrue(novedades.any { it.contains("Socorrista") })
     }
 
     @Test
     fun preEquipacionSinFotoGeneral_bloqueaCierreYNoExigeFotoPorEquipo() {
         val revision = crearRevisionConforme("eq1")
-        val avance = AvanceFaena(
-            buzo = buzoTest,
-            etapas = mapOf(
-                EtapaComprobacion.PRE_EQUIPACION to listOf(revision),
-                EtapaComprobacion.EQUIPADO to listOf(revision)
-            ),
-            etapasConfirmadas = EtapaComprobacion.entries.toSet(),
-            encuestas = mapOf(
-                MomentoSalud.ANTES to crearEncuestaApto(MomentoSalud.ANTES),
-                MomentoSalud.DESPUES to crearEncuestaApto(MomentoSalud.DESPUES)
-            ),
-            evidencia = mapOf(
-                EtapaComprobacion.PRE_EQUIPACION to EvidenciaEquipos(),
-                EtapaComprobacion.EQUIPADO to EvidenciaEquipos(
-                    fotos = TipoFotoEquipos.requeridas(EtapaComprobacion.EQUIPADO)
-                        .associateWith { "content://media/$it.jpg" }
+        val avanceSinGeneral = avance(
+            ejecutor = avanceBuzo(
+                buzo = buzoTest,
+                evidencia = mapOf(
+                    EtapaComprobacion.PRE_EQUIPACION to EvidenciaEquipos(),
+                    EtapaComprobacion.EQUIPADO to evidenciaCompleta()[EtapaComprobacion.EQUIPADO]!!
                 )
             )
         )
 
-        val pendientes = faenaBase.pendientes(avance)
+        val pendientes = faenaBase.pendientes(avanceSinGeneral)
         assertTrue(pendientes.any { it.detalle.contains("foto general", ignoreCase = true) })
         assertFalse(pendientes.any { it.detalle.contains("sin foto", ignoreCase = true) })
-        assertFalse(faenaBase.puedeFinalizar(avance))
+        assertFalse(faenaBase.puedeFinalizar(avanceSinGeneral))
     }
 
     @Test
     fun equipadoConSoloFotoDeFrente_bloqueaCierre() {
-        val revision = crearRevisionConforme("eq1")
-        val avance = AvanceFaena(
-            buzo = buzoTest,
-            etapas = EtapaComprobacion.entries.associateWith { listOf(revision) },
-            etapasConfirmadas = EtapaComprobacion.entries.toSet(),
-            encuestas = mapOf(
-                MomentoSalud.ANTES to crearEncuestaApto(MomentoSalud.ANTES),
-                MomentoSalud.DESPUES to crearEncuestaApto(MomentoSalud.DESPUES)
-            ),
-            evidencia = mapOf(
-                EtapaComprobacion.PRE_EQUIPACION to EvidenciaEquipos(
-                    fotos = mapOf(TipoFotoEquipos.GENERAL to "content://media/general.jpg")
-                ),
-                EtapaComprobacion.EQUIPADO to EvidenciaEquipos(
-                    fotos = mapOf(TipoFotoEquipos.FRENTE to "content://media/frente.jpg")
+        val avanceSinAtras = avance(
+            ejecutor = avanceBuzo(
+                buzo = buzoTest,
+                evidencia = mapOf(
+                    EtapaComprobacion.PRE_EQUIPACION to EvidenciaEquipos(
+                        fotos = mapOf(TipoFotoEquipos.GENERAL to "content://media/general.jpg")
+                    ),
+                    EtapaComprobacion.EQUIPADO to EvidenciaEquipos(
+                        fotos = mapOf(TipoFotoEquipos.FRENTE to "content://media/frente.jpg")
+                    )
                 )
             )
         )
 
-        val pendientes = faenaBase.pendientes(avance)
+        val pendientes = faenaBase.pendientes(avanceSinAtras)
         assertTrue(pendientes.any { it.detalle.contains("atrás") })
         assertFalse(pendientes.any { it.detalle.contains("foto general", ignoreCase = true) })
-        assertFalse(faenaBase.puedeFinalizar(avance))
+        assertFalse(faenaBase.puedeFinalizar(avanceSinAtras))
     }
 
     @Test
-    fun evaluacionCompartida_novedadesSeReportanUnaSolaVez() {
+    fun evaluacionCompartida_novedadesSeReportanUnaVezPorBuzo() {
         val revisionRiesgosa = crearRevisionConforme("eq1").copy(
             estado = EstadoEquipo.UTILIZABLE_RIESGOSO
         )
-        val avance = AvanceFaena(
-            buzo = buzoTest,
-            etapas = EtapaComprobacion.entries.associateWith { listOf(revisionRiesgosa) },
-            etapasConfirmadas = emptySet(),
+        val avanceConRiesgo = avance(
+            ejecutor = avanceBuzo(
+                buzo = buzoTest,
+                revisiones = EtapaComprobacion.entries.associateWith { listOf(revisionRiesgosa) },
+                confirmadas = emptySet(),
+                evidencia = emptyMap()
+            ),
+            socorrista = avanceBuzo(
+                buzo = socorristaTest,
+                revisiones = EtapaComprobacion.entries.associateWith { listOf(revisionRiesgosa) },
+                confirmadas = emptySet(),
+                evidencia = emptyMap()
+            ),
             encuestas = emptyMap()
         )
 
-        assertEquals(1, faenaBase.novedades(avance).count { it.contains(revisionRiesgosa.nombre) })
+        assertEquals(2, faenaBase.novedades(avanceConRiesgo).count { it.contains(revisionRiesgosa.nombre) })
     }
 
-    private fun crearRevisionConforme(id: String): RevisionEquipo {
-        return RevisionEquipo(
-            equipoId = id,
-            categoria = "Seguridad",
-            nombre = "Manómetro de inmersión",
-            descripcionUso = "Lectura correcta",
-            estado = EstadoEquipo.ACEPTABLE
+    // ───────── Helpers ─────────
+
+    private fun avanceBuzo(
+        buzo: Buzo? = buzoTest,
+        revisiones: Map<EtapaComprobacion, List<RevisionEquipo>> =
+            EtapaComprobacion.entries.associateWith { listOf(crearRevisionConforme("eq1")) },
+        confirmadas: Set<EtapaComprobacion> = EtapaComprobacion.entries.toSet(),
+        evidencia: Map<EtapaComprobacion, EvidenciaEquipos> = evidenciaCompleta()
+    ): AvanceBuzo = if (buzo == null) {
+        AvanceBuzo(buzo = null)
+    } else {
+        AvanceBuzo(
+            buzo = buzo,
+            etapas = revisiones,
+            etapasConfirmadas = confirmadas,
+            evidencia = evidencia
         )
     }
+
+    private fun avance(
+        ejecutor: AvanceBuzo? = avanceBuzo(buzoTest),
+        socorrista: AvanceBuzo? = avanceBuzo(socorristaTest),
+        encuestas: Map<MomentoSalud, EncuestaSalud> = mapOf(
+            MomentoSalud.ANTES to crearEncuestaApto(MomentoSalud.ANTES),
+            MomentoSalud.DESPUES to crearEncuestaApto(MomentoSalud.DESPUES)
+        )
+    ): AvanceFaena = AvanceFaena(
+        buzos = buildMap {
+            if (ejecutor != null) put(buzoTest.id, ejecutor)
+            if (socorrista != null) put(socorristaTest.id, socorrista)
+        },
+        encuestas = encuestas
+    )
+
+    private fun crearRevisionConforme(id: String): RevisionEquipo = RevisionEquipo(
+        equipoId = id,
+        categoria = "Seguridad",
+        nombre = "Manómetro de inmersión",
+        descripcionUso = "Lectura correcta",
+        estado = EstadoEquipo.ACEPTABLE
+    )
 
     private fun evidenciaCompleta(): Map<EtapaComprobacion, EvidenciaEquipos> =
         EtapaComprobacion.entries.associateWith { etapa ->
@@ -244,15 +300,13 @@ class RegistroFaenaRulesTest {
             EvidenciaEquipos(fotos = fotos)
         }
 
-    private fun crearEncuestaApto(momento: MomentoSalud): EncuestaSalud {
-        return EncuestaSalud(
-            faenaId = "F-100",
-            momento = momento,
-            esApto = true,
-            presionArterial = "120/80",
-            frecuenciaCardiaca = 72,
-            registradaPor = "Supervisor",
-            registradaEn = "21/11/2026 10:00"
-        )
-    }
+    private fun crearEncuestaApto(momento: MomentoSalud): EncuestaSalud = EncuestaSalud(
+        faenaId = "F-100",
+        momento = momento,
+        esApto = true,
+        presionArterial = "120/80",
+        frecuenciaCardiaca = 72,
+        registradaPor = "Supervisor",
+        registradaEn = "21/11/2026 10:00"
+    )
 }

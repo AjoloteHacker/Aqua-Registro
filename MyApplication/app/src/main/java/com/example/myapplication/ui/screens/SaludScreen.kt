@@ -147,8 +147,14 @@ fun SaludScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = uiState.faenaSeleccionada?.let { "${it.id} · ${it.buzoNombre}" }
-                                        ?: "Seleccionar faena",
+                                    text = uiState.faenaSeleccionada?.let { faena ->
+                                        buildString {
+                                            append(faena.id).append(" · ").append(faena.buzoNombre)
+                                            if (faena.socorristaNombre.isNotBlank()) {
+                                                append(" · Socorrista: ").append(faena.socorristaNombre)
+                                            }
+                                        }
+                                    } ?: "Seleccionar faena",
                                     color = AquaTextPrimary,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -162,7 +168,17 @@ fun SaludScreen(
                     ) {
                         uiState.faenas.forEach { f ->
                             DropdownMenuItem(
-                                text = { Text("${f.id} · ${f.buzoNombre} - ${f.tipoFaena}") },
+                                text = {
+                                    Text(
+                                        buildString {
+                                            append(f.id).append(" · ").append(f.buzoNombre)
+                                            if (f.socorristaNombre.isNotBlank()) {
+                                                append(" + ").append(f.socorristaNombre)
+                                            }
+                                            append(" - ").append(f.tipoFaena)
+                                        }
+                                    )
+                                },
                                 onClick = {
                                     viewModel.seleccionarFaena(f.id)
                                     dropdownExpanded = false
