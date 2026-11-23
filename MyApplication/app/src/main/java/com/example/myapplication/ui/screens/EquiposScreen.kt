@@ -23,7 +23,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.myapplication.data.model.EstadoEquipo
 import com.example.myapplication.data.model.EtapaComprobacion
+import com.example.myapplication.data.model.EvidenciaEquipos
 import com.example.myapplication.data.model.RevisionEquipo
+import com.example.myapplication.data.model.TipoFotoEquipos
 import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.ui.viewmodels.EquiposUiState
@@ -64,27 +66,27 @@ fun EquiposScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
-    var currentEquipoFotoId by remember { mutableStateOf<String?>(null) }
+    var tipoFotoActual by remember { mutableStateOf<TipoFotoEquipos?>(null) }
     var tempPhotoUri by remember { mutableStateOf<Uri?>(null) }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
-            val equipoId = currentEquipoFotoId
+            val tipo = tipoFotoActual
             val uri = tempPhotoUri
-            if (equipoId != null && uri != null) {
-                viewModel.registrarFoto(equipoId, uri.toString())
+            if (tipo != null && uri != null) {
+                viewModel.registrarFoto(tipo, uri.toString())
             }
         }
-        currentEquipoFotoId = null
+        tipoFotoActual = null
         tempPhotoUri = null
     }
 
-    fun tomarFoto(equipoId: String) {
-        currentEquipoFotoId = equipoId
+    fun tomarFoto(tipo: TipoFotoEquipos) {
+        tipoFotoActual = tipo
         val photosDir = File(context.cacheDir, "photos").apply { mkdirs() }
-        val photoFile = File.createTempFile("equipo_${equipoId}_", ".jpg", photosDir)
+        val photoFile = File.createTempFile("equipos_${tipo.name.lowercase()}_", ".jpg", photosDir)
         val uri = FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -118,7 +120,7 @@ fun EquiposScreen(
             onSeleccionarEtapa = viewModel::seleccionarEtapa,
             onEstadoChange = viewModel::actualizarEstado,
             onDescripcionChange = viewModel::actualizarDescripcion,
-            onTomarFoto = { equipoId -> tomarFoto(equipoId) },
+            onTomarFoto = { tipo -> tomarFoto(tipo) },
             onGuardarAvance = viewModel::guardarAvance,
             onConfirmarEtapa = viewModel::confirmarEtapa,
             modifier = Modifier.padding(paddingValues)
@@ -137,7 +139,7 @@ fun ChecklistEquiposContent(
     onSeleccionarEtapa: (EtapaComprobacion) -> Unit,
     onEstadoChange: (equipoId: String, EstadoEquipo) -> Unit,
     onDescripcionChange: (equipoId: String, String) -> Unit,
-    onTomarFoto: (equipoId: String) -> Unit,
+    onTomarFoto: (tipo: TipoFotoEquipos) -> Unit,
     onGuardarAvance: () -> Unit,
     onConfirmarEtapa: () -> Unit,
     modifier: Modifier = Modifier,
@@ -223,6 +225,17 @@ fun ChecklistEquiposContent(
                 .weight(1f)
                 .fillMaxWidth()
         ) {
+            // La evidencia scrollea junto con los equipos; si la dejáramos fuera del LazyColumn
+            // quedaría fija en el Column principal mientras solo las tarjetas se desplazan.
+            item(key = "evidencia") {
+                EvidenciaFotosSection(
+                    etapa = uiState.etapa,
+                    evidencia = uiState.evidencia,
+                    onTomarFoto = onTomarFoto,
+                    miniatura = miniatura
+                )
+            }
+
             uiState.equipos.groupBy { it.categoria }.forEach { (categoria, items) ->
                 item(key = "cat_$categoria") {
                     Text(
@@ -237,9 +250,7 @@ fun ChecklistEquiposContent(
                     EquipoCard(
                         equipo = equipo,
                         onEstadoChange = { onEstadoChange(equipo.equipoId, it) },
-                        onDescripcionChange = { onDescripcionChange(equipo.equipoId, it) },
-                        onTomarFoto = { onTomarFoto(equipo.equipoId) },
-                        miniatura = miniatura
+                        onDescripcionChange = { onDescripcionChange(equipo.equipoId, it) }
                     )
                 }
             }
@@ -249,7 +260,7 @@ fun ChecklistEquiposContent(
 
         if (!uiState.todoCompleto) {
             Text(
-                text = "Lo registrado con estado y foto queda guardado como evidencia. " +
+                text = "Lo registrado con estado y evidencia queda guardado como avance. " +
                         "Debes completar el resto más tarde.",
                 fontSize = 11.sp,
                 color = AquaTextSecondary
@@ -273,6 +284,89 @@ fun ChecklistEquiposContent(
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
+        }
+    }
+}
+
+// ───────────────────────── Evidencia fotográfica por etapa ─────────────────────────
+
+@Composable
+private fun EvidenciaFotosSection(
+    etapa: EtapaComprobacion,
+    evidencia: EvidenciaEquipos,
+    onTomarFoto: (TipoFotoEquipos) -> Unit,
+    miniatura: @Composable (uri: String, modifier: Modifier) -> Unit
+) {
+    val tipos = TipoFotoEquipos.requeridas(etapa)
+    val incompleta = !evidencia.estaCompleta(etapa)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = if (incompleta) BorderStroke(1.dp, SafetyDanger) else null
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (incompleta) Icons.Default.PhotoCamera else Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = if (incompleta) SafetyDanger else SafetySuccess,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Evidencia fotográfica · ${etapa.etiqueta}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = AquaTextPrimary
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            tipos.forEachIndexed { index, tipo ->
+                val uri = evidencia.fotos[tipo]
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (uri != null) {
+                        miniatura(uri, Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(AquaBackground),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Image, contentDescription = null, tint = AquaTextSecondary)
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = tipo.etiqueta,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            color = AquaTextPrimary
+                        )
+                        Text(
+                            text = if (uri == null) "Pendiente de captura" else "Capturada",
+                            fontSize = 11.sp,
+                            color = if (uri == null) SafetyDanger else SafetySuccess
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { onTomarFoto(tipo) },
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, if (uri == null) SafetyDanger else AquaPrimary)
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (uri == null) "Tomar foto" else "Repetir", fontSize = 12.sp)
+                    }
+                }
+                if (index < tipos.lastIndex) Spacer(Modifier.height(10.dp))
+            }
         }
     }
 }
@@ -311,11 +405,13 @@ private fun ResumenCard(uiState: EquiposUiState) {
                 ConteoItem("Sin revisar", uiState.sinRevisar, AquaTextSecondary)
             }
             Spacer(Modifier.height(6.dp))
+            val faltanFotos = uiState.fotosFaltantes
             Text(
-                text = "${uiState.corroborables} de ${uiState.equipos.size} con evidencia (estado + foto)" +
-                        if (uiState.sinFoto > 0) " · ${uiState.sinFoto} sin foto" else "",
+                text = "${uiState.completos} de ${uiState.equipos.size} con estado registrado" +
+                        if (faltanFotos.isEmpty()) " · Evidencia completa"
+                        else " · Faltan ${faltanFotos.joinToString(" y ") { it.etiqueta.lowercase() }}",
                 fontSize = 12.sp,
-                color = if (uiState.sinFoto > 0) SafetyDanger else AquaTextSecondary
+                color = if (faltanFotos.isEmpty()) AquaTextSecondary else SafetyDanger
             )
         }
     }
@@ -336,9 +432,7 @@ private fun ConteoItem(etiqueta: String, valor: Int, color: Color) {
 private fun EquipoCard(
     equipo: RevisionEquipo,
     onEstadoChange: (EstadoEquipo) -> Unit,
-    onDescripcionChange: (String) -> Unit,
-    onTomarFoto: () -> Unit,
-    miniatura: @Composable (String, Modifier) -> Unit
+    onDescripcionChange: (String) -> Unit
 ) {
     val opciones = listOf(
         EstadoEquipo.ACEPTABLE,
@@ -350,8 +444,7 @@ private fun EquipoCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = if (equipo.faltaFoto || equipo.faltaDescripcion)
-            BorderStroke(1.dp, SafetyDanger) else null,
+        border = if (equipo.faltaDescripcion) BorderStroke(1.dp, SafetyDanger) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(Modifier.padding(12.dp)) {
@@ -403,24 +496,6 @@ private fun EquipoCard(
                 maxLines = 3,
                 textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
             )
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                equipo.fotoUri?.let { uri ->
-                    miniatura(uri, Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)))
-                    Spacer(Modifier.width(10.dp))
-                }
-                OutlinedButton(
-                    onClick = onTomarFoto,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, if (equipo.faltaFoto) SafetyDanger else AquaPrimary)
-                ) {
-                    Icon(Icons.Default.PhotoCamera, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (equipo.fotoUri == null) "Tomar foto (obligatoria)" else "Repetir foto", fontSize = 12.sp)
-                }
-            }
         }
     }
 }
@@ -428,9 +503,9 @@ private fun EquipoCard(
 @Composable
 private fun EstadoBadge(equipo: RevisionEquipo) {
     val (texto, color) = when {
-        equipo.estaCompleto -> "Completo" to SafetySuccess
-        equipo.faltaFoto -> "Falta foto" to SafetyDanger
+        equipo.evaluacionCompleta -> "Evaluado" to SafetySuccess
         equipo.faltaDescripcion -> "Falta descripción" to AmbarRiesgo
+        !equipo.tieneEstado -> "Sin revisar" to AquaTextSecondary
         else -> "Pendiente" to AquaTextSecondary
     }
     Text(

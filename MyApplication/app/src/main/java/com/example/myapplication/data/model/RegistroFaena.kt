@@ -4,7 +4,8 @@ package com.example.myapplication.data.model
  * Registro de autorización e inmersión submarina.
  *
  * La faena sabe por sí misma si está lista para cerrarse. Flujo completo:
- *  1. Pre-equipación y 2. Equipado: revisión de equipos, confirmada por etapa.
+ *  1. Pre-equipación: estado individual de los equipos + una foto general, confirmado.
+ *  2. Equipado: mismo estado compartido + fotos de frente y atrás, confirmado.
  *  3. Encuesta de salud ANTES (con el buzo ya equipado).
  *  4. Aprobación de que los datos de la faena son correctos.
  *  5. Encuesta de salud DESPUÉS (cuando todo lo demás ya se revisó).
@@ -34,7 +35,8 @@ data class RegistroFaena(
 
     /**
      * Lo que falta para poder finalizar (bloquea el cierre), en el orden del flujo:
-     *  - equipos de ambas etapas completos y confirmados;
+     *  - evaluación individual de los equipos (compartida entre etapas);
+     *  - evidencia y confirmación de cada etapa (1 foto general / frente y atrás);
      *  - encuesta de salud ANTES registrada y con resultado APTO;
      *  - datos de la faena aprobados;
      *  - encuesta de salud DESPUÉS registrada (su resultado se reporta, no bloquea).
@@ -77,23 +79,34 @@ data class RegistroFaena(
 
     private fun pendientesEquipos(avance: AvanceFaena): List<Pendiente> {
         val faltantes = mutableListOf<Pendiente>()
-        EtapaComprobacion.entries.forEach { etapa ->
-            val equipos = avance.etapas[etapa].orEmpty()
+
+        // La evaluación individual es compartida: se informa una sola vez.
+        val equipos = avance.etapas[EtapaComprobacion.PRE_EQUIPACION].orEmpty()
+        if (equipos.isEmpty()) {
+            faltantes.add(
+                Pendiente(CategoriaPendiente.EQUIPOS, "No hay equipos registrados para revisar")
+            )
+        } else {
             val sinEstado = equipos.count { !it.tieneEstado }
-            val sinFoto = equipos.count { it.faltaFoto }
             val sinDescripcion = equipos.count { it.faltaDescripcion }
             val detalle = listOfNotNull(
                 "$sinEstado sin revisar".takeIf { sinEstado > 0 },
-                "$sinFoto sin foto".takeIf { sinFoto > 0 },
                 "$sinDescripcion sin descripción".takeIf { sinDescripcion > 0 }
             )
-            if (equipos.isEmpty()) {
+            if (detalle.isNotEmpty()) {
                 faltantes.add(
-                    Pendiente(CategoriaPendiente.EQUIPOS, "${etapa.etiqueta}: no hay equipos registrados para revisar")
+                    Pendiente(CategoriaPendiente.EQUIPOS, "Evaluación individual: ${detalle.joinToString(", ")}")
                 )
-            } else if (detalle.isNotEmpty()) {
+            }
+        }
+
+        EtapaComprobacion.entries.forEach { etapa ->
+            val faltanFotos = (avance.evidencia[etapa] ?: EvidenciaEquipos()).faltan(etapa)
+            if (faltanFotos.isNotEmpty()) {
+                val nombres = faltanFotos.joinToString(" y ") { it.etiqueta.lowercase() }
+                val verbo = if (faltanFotos.size == 1) "falta" else "faltan"
                 faltantes.add(
-                    Pendiente(CategoriaPendiente.EQUIPOS, "${etapa.etiqueta}: ${detalle.joinToString(", ")}")
+                    Pendiente(CategoriaPendiente.EQUIPOS, "${etapa.etiqueta}: $verbo $nombres")
                 )
             } else if (etapa !in avance.etapasConfirmadas) {
                 faltantes.add(
@@ -106,18 +119,18 @@ data class RegistroFaena(
 
     /**
      * Novedades que se reportan pero NO bloquean el cierre:
-     * equipos riesgosos o inutilizables, y un resultado NO APTO en la encuesta DESPUÉS.
+     * equipos riesgosos o inutilizables (la evaluación es compartida, se listan una vez),
+     * y un resultado NO APTO en la encuesta DESPUÉS.
      */
     fun novedades(avance: AvanceFaena): List<String> {
         val lista = mutableListOf<String>()
-        EtapaComprobacion.entries.forEach { etapa ->
-            avance.etapas[etapa].orEmpty()
-                .filter {
-                    it.estado == EstadoEquipo.UTILIZABLE_RIESGOSO ||
-                        it.estado == EstadoEquipo.INUTILIZABLE
-                }
-                .forEach { lista.add("${etapa.etiqueta}: ${it.nombre} (${it.estado.etiqueta})") }
-        }
+        avance.etapas[EtapaComprobacion.PRE_EQUIPACION].orEmpty()
+            .filter {
+                it.estado == EstadoEquipo.UTILIZABLE_RIESGOSO ||
+                    it.estado == EstadoEquipo.INUTILIZABLE
+            }
+            .distinctBy { it.equipoId }
+            .forEach { lista.add("Equipos: ${it.nombre} (${it.estado.etiqueta})") }
         val despues = avance.encuestas[MomentoSalud.DESPUES]
         if (despues != null && !despues.esApto) {
             lista.add("Encuesta de salud DESPUÉS: $buzoNombre resultó NO APTO (revisar posible incidente)")
@@ -231,7 +244,8 @@ data class AvanceFaena(
     val buzo: Buzo?,
     val etapas: Map<EtapaComprobacion, List<RevisionEquipo>>,
     val etapasConfirmadas: Set<EtapaComprobacion>,
-    val encuestas: Map<MomentoSalud, EncuestaSalud>
+    val encuestas: Map<MomentoSalud, EncuestaSalud>,
+    val evidencia: Map<EtapaComprobacion, EvidenciaEquipos> = emptyMap()
 )
 
 class FaenaIncompletaException(

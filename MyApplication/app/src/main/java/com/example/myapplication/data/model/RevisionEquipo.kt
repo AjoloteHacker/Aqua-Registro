@@ -1,5 +1,12 @@
 package com.example.myapplication.data.model
 
+/**
+ * Evaluación individual de un equipo dentro de una faena.
+ *
+ * El estado se comparte entre Pre-equipación y Equipado: se guarda una sola vez
+ * por (faena, equipo). Las fotos NO van aquí: son evidencia global por etapa
+ * (ver [EvidenciaEquipos]).
+ */
 data class RevisionEquipo(
     val equipoId: String,
     val categoria: String,
@@ -7,13 +14,9 @@ data class RevisionEquipo(
     val descripcionUso: String,
     val estado: EstadoEquipo = EstadoEquipo.SIN_REVISAR,
     val descripcionEstado: String = "",
-    val fotoUri: String? = null,
     val registradoEn: Long? = null
 ) {
     val tieneEstado get() = estado != EstadoEquipo.SIN_REVISAR
-    val esCorroborable get() = tieneEstado && fotoUri != null
-    val estaCompleto get() = esCorroborable &&
-            (estado == EstadoEquipo.ACEPTABLE || descripcionEstado.isNotBlank())
-    val faltaFoto get() = tieneEstado && fotoUri == null
     val faltaDescripcion get() = tieneEstado && estado != EstadoEquipo.ACEPTABLE && descripcionEstado.isBlank()
+    val evaluacionCompleta get() = tieneEstado && !faltaDescripcion
 }

@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.model.EstadoEquipo
 import com.example.myapplication.data.model.EtapaComprobacion
+import com.example.myapplication.data.model.EvidenciaEquipos
 import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.data.model.RevisionEquipo
+import com.example.myapplication.data.model.TipoFotoEquipos
 import com.example.myapplication.data.repository.AquaRepository
 import com.example.myapplication.data.repository.DestinoRevision
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,16 +32,17 @@ data class EquiposUiState(
     val faenaSeleccionadaId: String? = null,
     val etapa: EtapaComprobacion = EtapaComprobacion.PRE_EQUIPACION,
     val equipos: List<RevisionEquipo> = emptyList(),
+    val evidencia: EvidenciaEquipos = EvidenciaEquipos(),
     val userMessage: String? = null
 ) {
     val aceptables get() = equipos.count { it.estado == EstadoEquipo.ACEPTABLE }
     val riesgosos get() = equipos.count { it.estado == EstadoEquipo.UTILIZABLE_RIESGOSO }
     val inutilizables get() = equipos.count { it.estado == EstadoEquipo.INUTILIZABLE }
     val sinRevisar get() = equipos.count { !it.tieneEstado }
-    val sinFoto get() = equipos.count { it.faltaFoto }
-    val corroborables get() = equipos.count { it.esCorroborable }
-    val completos get() = equipos.count { it.estaCompleto }
-    val todoCompleto get() = equipos.isNotEmpty() && completos == equipos.size
+    val completos get() = equipos.count { it.evaluacionCompleta }
+    val fotosFaltantes get() = evidencia.faltan(etapa)
+    val fotoCompleta get() = evidencia.estaCompleta(etapa)
+    val todoCompleto get() = equipos.isNotEmpty() && completos == equipos.size && fotoCompleta
 }
 
 // ───────────────────────── ViewModel ─────────────────────────
@@ -47,6 +50,10 @@ data class EquiposUiState(
 /**
  * Control de equipos por FAENA: cada faena en curso tiene su propio checklist,
  * evidencia y etapas confirmadas (no se heredan de faenas anteriores del mismo buzo).
+ *
+ * La evaluación individual se comparte entre Pre-equipación y Equipado: se guarda
+ * una sola vez por (faena, equipo). La evidencia fotográfica sí es por etapa:
+ * una foto general en Pre-equipación y frente/atrás en Equipado.
  */
 class EquiposViewModel(
     private val repository: AquaRepository = AquaRepository.getInstance()
@@ -99,11 +106,12 @@ class EquiposViewModel(
         modificar(equipoId) { it.copy(descripcionEstado = texto) }
     }
 
-    /** Llamar cuando la cámara devuelva la URI de la foto del equipo. */
-    fun registrarFoto(equipoId: String, uri: String) {
-        modificar(equipoId) {
-            it.copy(fotoUri = uri, registradoEn = System.currentTimeMillis())
-        }
+    /** Llamar cuando la cámara devuelva la URI de una foto de evidencia de la etapa. */
+    fun registrarFoto(tipo: TipoFotoEquipos, uri: String) {
+        val s = _uiState.value
+        val faenaId = s.faenaSeleccionadaId ?: return
+        repository.guardarFotoEvidencia(faenaId, s.etapa, tipo, uri)
+        recargar()
     }
 
     /** Todo ya está persistido; esto solo informa al usuario del estado del avance. */
@@ -111,10 +119,11 @@ class EquiposViewModel(
         val s = _uiState.value
         val faena = faenasEnCurso.firstOrNull { it.id == s.faenaSeleccionadaId }
         val etiqueta = faena?.let { "${it.id} (${it.buzoNombre})" } ?: "la faena"
+        val evidencia = if (s.fotoCompleta) "evidencia completa" else "fotos pendientes"
         _uiState.update {
             it.copy(
-                userMessage = "Avance de $etiqueta guardado (${s.completos}/${s.equipos.size} completos, " +
-                        "${s.corroborables} con evidencia). Debes completar el resto más tarde."
+                userMessage = "Avance de $etiqueta guardado (${s.completos}/${s.equipos.size} equipos evaluados, " +
+                        "$evidencia en ${s.etapa.etiqueta}). Debes completar el resto más tarde."
             )
         }
     }
@@ -123,7 +132,7 @@ class EquiposViewModel(
         val s = _uiState.value
         val faenaId = s.faenaSeleccionadaId ?: return
         if (!s.todoCompleto) {
-            _uiState.update { it.copy(userMessage = "Faltan equipos por completar.") }
+            _uiState.update { it.copy(userMessage = "Faltan evaluaciones o fotos por completar.") }
             return
         }
         repository.confirmarEtapa(faenaId, s.etapa)
@@ -140,7 +149,7 @@ class EquiposViewModel(
         val s = _uiState.value
         val faenaId = s.faenaSeleccionadaId ?: return
         val actual = s.equipos.firstOrNull { it.equipoId == equipoId } ?: return
-        repository.guardarRevision(faenaId, s.etapa, cambio(actual)) // persiste al instante
+        repository.guardarRevision(faenaId, cambio(actual)) // se guarda al instante (estado compartido)
         recargar()
     }
 
@@ -148,12 +157,21 @@ class EquiposViewModel(
         val s = _uiState.value
         val faenas = faenasEnCurso.map { f ->
             val items = repository.revisionesCombinadas(f, s.etapa)
-            FaenaRevision(f.id, f.buzoNombre, f.tipoFaena, items.count { it.estaCompleto }, items.size)
+            FaenaRevision(
+                f.id,
+                f.buzoNombre,
+                f.tipoFaena,
+                items.count { it.evaluacionCompleta },
+                items.size
+            )
         }
-        val equipos = faenasEnCurso
-            .firstOrNull { it.id == s.faenaSeleccionadaId }
+        val seleccionada = faenasEnCurso.firstOrNull { it.id == s.faenaSeleccionadaId }
+        val equipos = seleccionada
             ?.let { repository.revisionesCombinadas(it, s.etapa) }
             ?: emptyList()
-        _uiState.update { it.copy(faenas = faenas, equipos = equipos) }
+        val evidencia = seleccionada
+            ?.let { repository.obtenerEvidencia(it.id, s.etapa) }
+            ?: EvidenciaEquipos()
+        _uiState.update { it.copy(faenas = faenas, equipos = equipos, evidencia = evidencia) }
     }
 }

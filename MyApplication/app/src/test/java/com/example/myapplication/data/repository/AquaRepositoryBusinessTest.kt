@@ -1,9 +1,13 @@
 package com.example.myapplication.data.repository
 
 import com.example.myapplication.data.model.Buzo
+import com.example.myapplication.data.model.EstadoEquipo
 import com.example.myapplication.data.model.EstadoSalud
+import com.example.myapplication.data.model.EtapaComprobacion
 import com.example.myapplication.data.model.Prevencionista
 import com.example.myapplication.data.model.RegistroFaena
+import com.example.myapplication.data.model.RevisionEquipo
+import com.example.myapplication.data.model.TipoFotoEquipos
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -91,4 +95,54 @@ class AquaRepositoryBusinessTest {
         val resultado = repository.agregarEmpresa("   ")
         assertTrue(resultado.isFailure)
     }
+
+    @Test
+    fun estadoDelEquipoSeComparteEntreEtapas() {
+        val faena = faenaDePruebaEquipos()
+        repository.guardarRevision(
+            faena.id,
+            RevisionEquipo(
+                equipoId = "e1",
+                categoria = "General",
+                nombre = "Traje de buceo",
+                descripcionUso = "Estanco",
+                estado = EstadoEquipo.ACEPTABLE
+            )
+        )
+
+        val pre = repository.revisionesCombinadas(faena, EtapaComprobacion.PRE_EQUIPACION)
+        val equipado = repository.revisionesCombinadas(faena, EtapaComprobacion.EQUIPADO)
+
+        assertEquals(EstadoEquipo.ACEPTABLE, pre.first { it.equipoId == "e1" }.estado)
+        assertEquals(EstadoEquipo.ACEPTABLE, equipado.first { it.equipoId == "e1" }.estado)
+    }
+
+    @Test
+    fun evidenciaFotograficaEsIndependientePorEtapa() {
+        val faena = faenaDePruebaEquipos()
+        val pre = EtapaComprobacion.PRE_EQUIPACION
+        val equipado = EtapaComprobacion.EQUIPADO
+
+        repository.guardarFotoEvidencia(faena.id, pre, TipoFotoEquipos.GENERAL, "content://media/general.jpg")
+        repository.guardarFotoEvidencia(faena.id, equipado, TipoFotoEquipos.FRENTE, "content://media/frente.jpg")
+
+        val evidenciaPre = repository.obtenerEvidencia(faena.id, pre)
+        val evidenciaEquipado = repository.obtenerEvidencia(faena.id, equipado)
+
+        assertTrue(evidenciaPre.estaCompleta(pre))
+        assertEquals(listOf(TipoFotoEquipos.ATRAS), evidenciaEquipado.faltan(equipado))
+        assertNull(evidenciaPre.fotos[TipoFotoEquipos.FRENTE])
+    }
+
+    private fun faenaDePruebaEquipos() = RegistroFaena(
+        id = "F-TEST-EQUIPOS",
+        buzoId = "B-TEST-EQUIPOS",
+        buzoNombre = "Buzo de prueba",
+        empresa = "AquaTest",
+        centroCultivo = "Centro de prueba",
+        tipoFaena = "Inspección",
+        profundidadMetros = 10,
+        tiempoMinutos = 20,
+        fechaHora = "22/11/2026 10:00"
+    )
 }
