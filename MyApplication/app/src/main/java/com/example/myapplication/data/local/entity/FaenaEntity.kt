@@ -7,6 +7,9 @@ import com.example.myapplication.data.model.RegistroFaena
 
 /**
  * Entidad de Room para la tabla de faenas AST en SQLite.
+ *
+ * [socorristaId] y [socorristaNombre] se agregaron en la versión 6: las faenas
+ * antiguas conservan sus valores por defecto (cadena vacía = socorrista no asignado).
  */
 @Entity(tableName = "faenas")
 data class FaenaEntity(
@@ -14,6 +17,8 @@ data class FaenaEntity(
     val id: String,
     val buzoId: String,
     val buzoNombre: String,
+    val socorristaId: String = "",
+    val socorristaNombre: String = "",
     val empresa: String,
     val centroCultivo: String,
     val tipoFaena: String,
@@ -29,6 +34,8 @@ data class FaenaEntity(
         id = id,
         buzoId = buzoId,
         buzoNombre = buzoNombre,
+        socorristaId = socorristaId,
+        socorristaNombre = socorristaNombre,
         empresa = empresa,
         centroCultivo = centroCultivo,
         tipoFaena = tipoFaena,
@@ -47,6 +54,8 @@ data class FaenaEntity(
             id = faena.id,
             buzoId = faena.buzoId,
             buzoNombre = faena.buzoNombre,
+            socorristaId = faena.socorristaId,
+            socorristaNombre = faena.socorristaNombre,
             empresa = faena.empresa,
             centroCultivo = faena.centroCultivo,
             tipoFaena = faena.tipoFaena,

@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.myapplication.data.model.Buzo
 import com.example.myapplication.data.model.EstadoSalud
+import java.time.LocalDate
 
 /**
  * Entidad de Room para la tabla de buzos en SQLite.
@@ -21,7 +22,12 @@ data class BuzoEntity(
     val ultimoChequeo: String,
     val categoria: String,
     val vigenciaMatricula: String,
-    val fotoUrl: String?
+    val fotoUrl: String? = null,
+    val estatura: Float? = null,
+    val talla: Float? = null,
+    val peso: Float? = null,
+    val alergias: String? = null,
+    val edadIso: String? = null
 ) {
     fun toDomain(): Buzo = Buzo(
         id = id,
@@ -30,11 +36,20 @@ data class BuzoEntity(
         empresa = empresa,
         matricula = matricula,
         telefono = telefono,
-        estadoSalud = try { EstadoSalud.valueOf(estadoSalud) } catch (_: Exception) { EstadoSalud.PENDIENTE },
+        estadoSalud = try {
+            EstadoSalud.valueOf(estadoSalud)
+        } catch (_: Exception) {
+            EstadoSalud.PENDIENTE
+        },
         ultimoChequeo = ultimoChequeo,
         categoria = categoria,
         vigenciaMatricula = vigenciaMatricula,
-        fotoUrl = fotoUrl
+        fotoUrl = fotoUrl,
+        estatura = estatura,
+        talla = talla,
+        peso = peso,
+        alergias = alergias,
+        edad = edadIso?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     )
 
     companion object {
@@ -49,7 +64,12 @@ data class BuzoEntity(
             ultimoChequeo = buzo.ultimoChequeo,
             categoria = buzo.categoria,
             vigenciaMatricula = buzo.vigenciaMatricula,
-            fotoUrl = buzo.fotoUrl
+            fotoUrl = buzo.fotoUrl,
+            estatura = buzo.estatura,
+            talla = buzo.talla,
+            peso = buzo.peso,
+            alergias = buzo.alergias,
+            edadIso = buzo.edad?.toString()
         )
     }
 }

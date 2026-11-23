@@ -1,6 +1,13 @@
 *.iml
 .gradle
 /local.properties
+
+# Claves de firma y credenciales seguras (Seguridad EA4 / EA5)
+*.jks
+*.keystore
+keystore.properties
+*.key
+signing/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
@@ -13,3 +20,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Claves de firma y credenciales seguras (Seguridad EA4 / EA5)
+*.jks
+*.keystore
+keystore.properties
+*.key
+signing/

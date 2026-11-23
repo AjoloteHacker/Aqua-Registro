@@ -37,6 +37,7 @@ data class HistorialUiState(
         get() = faenas.filter { faena ->
             val coincideTexto = searchQuery.isBlank() ||
                     faena.buzoNombre.contains(searchQuery, ignoreCase = true) ||
+                    faena.socorristaNombre.contains(searchQuery, ignoreCase = true) ||
                     faena.centroCultivo.contains(searchQuery, ignoreCase = true) ||
                     faena.tipoFaena.contains(searchQuery, ignoreCase = true) ||
                     faena.empresa.contains(searchQuery, ignoreCase = true) ||
@@ -93,15 +94,19 @@ class HistorialViewModel(
 
     init {
         // Se recalcula cuando cambian las faenas, la salud de los buzos, las revisiones de equipos,
-        // las etapas confirmadas o las encuestas de salud (por ejemplo, al volver desde Equipos o Salud).
+        // la evidencia fotográfica, las etapas confirmadas o las encuestas de salud
+        // (por ejemplo, al volver desde Equipos o Salud).
         viewModelScope.launch {
-            combine(
-                repository.faenas,
-                repository.buzos,
+            val cambiosEquipos = combine(
                 repository.revisiones,
+                repository.evidenciasEquipos,
                 repository.etapasConfirmadas,
                 repository.encuestas
-            ) { faenas, _, _, _, _ -> faenas }
+            ) { _, _, _, _ -> Unit }
+            combine(
+                combine(repository.faenas, repository.buzos) { faenas, _ -> faenas },
+                cambiosEquipos
+            ) { faenas, _ -> faenas }
                 .collect { faenas -> actualizarFaenas(faenas) }
         }
         viewModelScope.launch {

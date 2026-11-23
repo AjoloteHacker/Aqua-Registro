@@ -30,9 +30,14 @@ import coil.compose.AsyncImage
 import com.example.myapplication.data.model.Buzo
 import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.ui.components.AquaScaffold
+import com.example.myapplication.ui.components.RuedaSelectorCard
 import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.ui.viewmodels.BuzoViewModel
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 // Autor: Amaro Villalobos
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,7 +49,7 @@ fun BuzoScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-
+    var mostrarDatePicker by remember { mutableStateOf(false) }
     var empresaDropdownExpanded by remember { mutableStateOf(false) }
     var categoriaDropdownExpanded by remember { mutableStateOf(false) }
     var vigenciaDropdownExpanded by remember { mutableStateOf(false) }
@@ -325,6 +330,110 @@ fun BuzoScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        // Peso, estatura y talla
+                        val opcionesPeso = remember { (45..140).map { it.toString() } }
+                        val opcionesEstatura = remember {
+                            (145..210).map { String.format(Locale.US, "%.2f", it / 100.0) }
+                        }
+                        val opcionesTallaRopa = remember { (36..48).map { it.toString() } }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                RuedaSelectorCard(
+                                    titulo = "Peso Corporal",
+                                    unidad = "kg",
+                                    icono = Icons.Default.MonitorWeight,
+                                    opciones = opcionesPeso,
+                                    valorSeleccionado = uiState.nuevoPeso?.toInt()?.toString() ?: "78",
+                                    onValorChange = { viewModel.onPesoChange(it) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                RuedaSelectorCard(
+                                    titulo = "Estatura",
+                                    unidad = "m",
+                                    icono = Icons.Default.Height,
+                                    opciones = opcionesEstatura,
+                                    valorSeleccionado = uiState.nuevaEstatura?.let { String.format(Locale.US, "%.2f", it) } ?: "1.75",
+                                    onValorChange = { viewModel.onEstaturaChange(it) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            RuedaSelectorCard(
+                                titulo = "Talla",
+                                unidad = "",
+                                icono = Icons.Default.Person,
+                                opciones = opcionesTallaRopa,
+                                valorSeleccionado = uiState.nuevaTalla?.toInt()?.toString() ?: "42",
+                                onValorChange = { viewModel.onTallaChange(it) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        // Alergias
+                        OutlinedTextField(
+                            value = uiState.nuevasAlergias,
+                            onValueChange = { viewModel.onNuevasAlergiasChange(it) },
+                            label = { Text("Alergias") },
+                            placeholder = { Text("ej: Penicilina, ninguna") },
+                            leadingIcon = { Icon(Icons.Default.MedicalServices, contentDescription = null) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        // Fecha de nacimiento
+                        OutlinedTextField(
+                            value = uiState.nuevaEdad?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Fecha de nacimiento") },
+                            placeholder = { Text("dd/MM/aaaa") },
+                            leadingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
+                            trailingIcon = {
+                                IconButton(onClick = { mostrarDatePicker = true }) {
+                                    Icon(Icons.Default.EditCalendar, contentDescription = "Seleccionar fecha")
+                                }
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (mostrarDatePicker) {
+                            val datePickerState = rememberDatePickerState(
+                                selectableDates = object : SelectableDates {
+                                    override fun isSelectableDate(utcTimeMillis: Long) =
+                                        utcTimeMillis <= System.currentTimeMillis() // sin fechas futuras
+                                }
+                            )
+                            DatePickerDialog(
+                                onDismissRequest = { mostrarDatePicker = false },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            datePickerState.selectedDateMillis?.let { millis ->
+                                                val fecha = Instant.ofEpochMilli(millis)
+                                                    .atZone(ZoneOffset.UTC)
+                                                    .toLocalDate()
+                                                viewModel.onNuevaEdadChange(fecha)
+                                            }
+                                            mostrarDatePicker = false
+                                        },
+                                        enabled = datePickerState.selectedDateMillis != null
+                                    ) { Text("Aceptar") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") }
+                                }
+                            ) {
+                                DatePicker(state = datePickerState)
+                            }
+                        }
+
 
                         // Selector de Categoría DIRECTEMAR
                         Box(modifier = Modifier.fillMaxWidth()) {

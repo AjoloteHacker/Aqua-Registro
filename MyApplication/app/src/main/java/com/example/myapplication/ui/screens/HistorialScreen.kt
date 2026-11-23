@@ -315,7 +315,12 @@ fun FaenaCard(
                 )
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = faena.buzoNombre,
+                    text = buildString {
+                        append(faena.buzoNombre)
+                        if (faena.socorristaNombre.isNotBlank()) {
+                            append(" · Socorrista: ${faena.socorristaNombre}")
+                        }
+                    },
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
                     color = AquaTextPrimary
@@ -487,7 +492,11 @@ fun RevisionFaenaDialog(
                     fontWeight = FontWeight.Bold,
                     color = AquaTextPrimary
                 )
-                DatoFila("Buzo", faena.buzoNombre)
+                DatoFila("Buzo ejecutor", faena.buzoNombre)
+                DatoFila(
+                    "Socorrista",
+                    faena.socorristaNombre.takeIf { it.isNotBlank() } ?: "Sin asignar"
+                )
                 DatoFila("Empresa", faena.empresa)
                 DatoFila("Centro", faena.centroCultivo)
                 DatoFila("Faena", faena.tipoFaena)
@@ -578,7 +587,7 @@ fun RevisionFaenaDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Todo verificado. La faena puede finalizarse.",
+                            text = "Todo verificado. La faena puede finalizarse (la encuesta DESPUÉS es informativa).",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = SafetySuccess

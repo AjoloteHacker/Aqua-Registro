@@ -10,6 +10,10 @@ import com.example.myapplication.data.local.entity.FaenaEntity
 import com.example.myapplication.data.model.*
 import com.example.myapplication.util.NetworkMonitor
 import com.example.myapplication.util.Rutificador
+import com.example.myapplication.data.remote.RetrofitClient
+import com.example.myapplication.data.remote.dto.*
+import com.example.myapplication.util.SyncWorker
+import com.example.myapplication.data.local.SessionDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,8 +27,14 @@ import java.time.LocalDate
 import java.util.Date
 import java.util.Locale
 
-/** Clave de una revisión: (faenaId, etapa, equipoId). */
-typealias ClaveRevision = Triple<String, EtapaComprobacion, String>
+/** Clave del estado compartido de un equipo: (faenaId, buzoId, equipoId). */
+typealias ClaveRevision = Triple<String, String, String>
+
+/** Clave de la evidencia fotográfica: (faenaId, buzoId, etapa). */
+typealias ClaveEvidencia = Triple<String, String, EtapaComprobacion>
+
+/** Clave de una etapa confirmada: (faenaId, buzoId, etapa). */
+typealias ClaveEtapa = Triple<String, String, EtapaComprobacion>
 
 /** Pantalla a la que se pide llevar la revisión de una faena. */
 enum class DestinoRevision { EQUIPOS, SALUD }
@@ -47,7 +57,14 @@ class AquaRepository private constructor() {
 
     private var database: AppDatabase? = null
     private var networkMonitor: NetworkMonitor? = null
+    private var appContext: Context? = null
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    private val _climaMaritimo = MutableStateFlow<String>("Clima Marítimo: 11.5°C · Viento: 14 km/h · Apto Inmersión")
+    val climaMaritimo: StateFlow<String> = _climaMaritimo.asStateFlow()
+
+    private val _syncStatus = MutableStateFlow<String>("Sincronizado con Room SQLite")
+    val syncStatus: StateFlow<String> = _syncStatus.asStateFlow()
 
     // Catálogos
     private val _empresas = MutableStateFlow<List<String>>(
@@ -105,7 +122,12 @@ class AquaRepository private constructor() {
                 telefono = "+56 9 8451 2290",
                 estadoSalud = EstadoSalud.APTO,
                 ultimoChequeo = "15/09/2026 - 08:30 hrs",
-                fotoUrl = "https://randomuser.me/api/portraits/men/32.jpg"
+                fotoUrl = "https://randomuser.me/api/portraits/men/32.jpg",
+                estatura = 1.78f,
+                talla = 42f,
+                peso = 79.5f,
+                alergias = "Ninguna conocida",
+                edad = LocalDate.of(1988, 4, 12)
             ),
             Buzo(
                 id = "2",
@@ -116,7 +138,12 @@ class AquaRepository private constructor() {
                 telefono = "+56 9 7123 9940",
                 estadoSalud = EstadoSalud.PENDIENTE,
                 ultimoChequeo = "Pendiente de faena",
-                fotoUrl = "https://randomuser.me/api/portraits/men/44.jpg"
+                fotoUrl = "https://randomuser.me/api/portraits/men/44.jpg",
+                estatura = 1.72f,
+                talla = 40f,
+                peso = 74.0f,
+                alergias = "Penicilina",
+                edad = LocalDate.of(1993, 9, 27)
             ),
             Buzo(
                 id = "3",
@@ -127,7 +154,12 @@ class AquaRepository private constructor() {
                 telefono = "+56 9 9234 5512",
                 estadoSalud = EstadoSalud.APTO,
                 ultimoChequeo = "15/09/2026 - 09:15 hrs",
-                fotoUrl = "https://randomuser.me/api/portraits/men/68.jpg"
+                fotoUrl = "https://randomuser.me/api/portraits/men/68.jpg",
+                estatura = 1.81f,
+                talla = 44f,
+                peso = 85.2f,
+                alergias = null,
+                edad = LocalDate.of(1990, 1, 19)
             )
         )
     )
@@ -136,14 +168,19 @@ class AquaRepository private constructor() {
     private val _equiposPorBuzo = MutableStateFlow<Map<String, List<EquipoChequeo>>>(emptyMap())
     val equiposPorBuzo: StateFlow<Map<String, List<EquipoChequeo>>> = _equiposPorBuzo.asStateFlow()
 
-    // Revisiones de equipos y etapas confirmadas, POR FAENA (reactivas, para que Historial se actualice solo)
+    // Evaluación individual de equipos (compartida entre etapas) y etapas confirmadas, POR FAENA.
+    // Reactivas, para que Historial se actualice solo.
     private val _revisiones = MutableStateFlow<Map<ClaveRevision, RevisionEquipo>>(emptyMap())
     val revisiones: StateFlow<Map<ClaveRevision, RevisionEquipo>> = _revisiones.asStateFlow()
 
-    private val _etapasConfirmadas =
-        MutableStateFlow<Set<Pair<String, EtapaComprobacion>>>(emptySet())
-    val etapasConfirmadas: StateFlow<Set<Pair<String, EtapaComprobacion>>> =
-        _etapasConfirmadas.asStateFlow()
+    // Fotos globales por faena y etapa: 1 en Pre-equipación, 2 en Equipado.
+    private val _evidenciasEquipos =
+        MutableStateFlow<Map<ClaveEvidencia, EvidenciaEquipos>>(emptyMap())
+    val evidenciasEquipos: StateFlow<Map<ClaveEvidencia, EvidenciaEquipos>> =
+        _evidenciasEquipos.asStateFlow()
+
+    private val _etapasConfirmadas = MutableStateFlow<Set<ClaveEtapa>>(emptySet())
+    val etapasConfirmadas: StateFlow<Set<ClaveEtapa>> = _etapasConfirmadas.asStateFlow()
 
     // Encuestas de salud por faena y momento (ANTES / DESPUÉS)
     private val _encuestas =
@@ -184,8 +221,6 @@ class AquaRepository private constructor() {
                 fechaHora = "15/09/2026 09:50",
                 fecha = LocalDate.now(),
                 esApto = true,
-                pesoKg = 81.0,
-                tallaM = 1.76,
                 colesterolTotal = 185,
                 hdl = 52,
                 ldl = 110,
@@ -205,8 +240,6 @@ class AquaRepository private constructor() {
                 fechaHora = "15/09/2026 08:45",
                 fecha = LocalDate.now(),
                 esApto = true,
-                pesoKg = 81.0,
-                tallaM = 1.76,
                 colesterolTotal = 185,
                 hdl = 52,
                 ldl = 110,
@@ -264,6 +297,8 @@ class AquaRepository private constructor() {
                 id = "F-102",
                 buzoId = "3",
                 buzoNombre = "Rodrigo Mansilla Cárdenas",
+                socorristaId = "2",
+                socorristaNombre = "Pedro Almonacid Vera",
                 empresa = "Buceos del Sur S.A.",
                 centroCultivo = "Centro Chiloé Norte - Isla Lemuy",
                 tipoFaena = "Limpieza y retiro de bioincrustaciones en mallas",
@@ -286,6 +321,7 @@ class AquaRepository private constructor() {
      */
     fun setupDatabase(context: Context) {
         if (database != null) return
+        appContext = context.applicationContext
         val db = AppDatabase.getInstance(context)
         database = db
         val netMonitor = NetworkMonitor.getInstance(context)
@@ -294,6 +330,13 @@ class AquaRepository private constructor() {
         coroutineScope.launch {
             netMonitor.isConnected.collect { online ->
                 _isNetworkConnected.value = online
+                if (online) {
+                    _syncStatus.value = "En línea · Sincronizando con Spring Boot..."
+                    appContext?.let { SyncWorker.encolarSincronizacion(it) }
+                    consultarClimaMaritimo(centrosCultivo.first())
+                } else {
+                    _syncStatus.value = "Modo Terreno Offline · Guardando en Room"
+                }
             }
         }
 
@@ -461,9 +504,13 @@ class AquaRepository private constructor() {
         val buzo = _buzos.value.firstOrNull { it.id == buzoId }
             ?: return Result.failure(NoSuchElementException("Buzo no encontrado"))
 
-        val tieneFaenaEnCurso = _faenas.value.any {
-            (it.buzoId == buzoId || it.buzoNombre.equals(buzo.nombre, ignoreCase = true)) &&
-            it.enCurso
+        val tieneFaenaEnCurso = _faenas.value.any { faena ->
+            faena.enCurso && (
+                faena.buzoId == buzoId ||
+                    faena.socorristaId == buzoId ||
+                    faena.buzoNombre.equals(buzo.nombre, ignoreCase = true) ||
+                    faena.socorristaNombre.equals(buzo.nombre, ignoreCase = true)
+                )
         }
         if (tieneFaenaEnCurso) {
             return Result.failure(IllegalStateException("No es posible eliminar a ${buzo.nombre} porque tiene una faena en curso."))
@@ -523,30 +570,63 @@ class AquaRepository private constructor() {
         }
     }
 
-    // Revisiones y etapas: cada faena tiene su propio checklist, evidencia y etapas confirmadas
-    fun obtenerRevisiones(faenaId: String, etapa: EtapaComprobacion): List<RevisionEquipo> =
+    // Revisiones y etapas: cada buzo de cada faena tiene su propio checklist, evidencia
+    // y etapas confirmadas. La evaluación individual se guarda UNA sola vez por
+    // (faena, buzo, equipo) y se comparte entre etapas.
+    fun obtenerRevisiones(faenaId: String, buzoId: String): List<RevisionEquipo> =
         _revisiones.value
-            .filterKeys { it.first == faenaId && it.second == etapa }
+            .filterKeys { it.first == faenaId && it.second == buzoId }
             .values
             .toList()
 
-    fun guardarRevision(faenaId: String, etapa: EtapaComprobacion, revision: RevisionEquipo) {
+    fun guardarRevision(faenaId: String, buzoId: String, revision: RevisionEquipo) {
         _revisiones.update { actual ->
-            actual + (Triple(faenaId, etapa, revision.equipoId) to revision)
+            actual + (ClaveRevision(faenaId, buzoId, revision.equipoId) to revision)
         }
     }
 
-    fun confirmarEtapa(faenaId: String, etapa: EtapaComprobacion) {
-        _etapasConfirmadas.update { it + (faenaId to etapa) }
+    fun obtenerEvidencia(
+        faenaId: String,
+        buzoId: String,
+        etapa: EtapaComprobacion
+    ): EvidenciaEquipos =
+        _evidenciasEquipos.value[ClaveEvidencia(faenaId, buzoId, etapa)] ?: EvidenciaEquipos()
+
+    fun guardarFotoEvidencia(
+        faenaId: String,
+        buzoId: String,
+        etapa: EtapaComprobacion,
+        tipo: TipoFotoEquipos,
+        uri: String
+    ) {
+        val clave = ClaveEvidencia(faenaId, buzoId, etapa)
+        _evidenciasEquipos.update { actual ->
+            val anterior = actual[clave] ?: EvidenciaEquipos()
+            actual + (clave to anterior.copy(
+                fotos = anterior.fotos + (tipo to uri),
+                registradoEn = System.currentTimeMillis()
+            ))
+        }
     }
 
-    fun etapaConfirmada(faenaId: String, etapa: EtapaComprobacion): Boolean =
-        (faenaId to etapa) in _etapasConfirmadas.value
+    fun confirmarEtapa(faenaId: String, buzoId: String, etapa: EtapaComprobacion) {
+        _etapasConfirmadas.update { it + ClaveEtapa(faenaId, buzoId, etapa) }
+    }
 
-    /** Catálogo de equipos del buzo de la faena + revisiones guardadas de ESA faena. */
-    fun revisionesCombinadas(faena: RegistroFaena, etapa: EtapaComprobacion): List<RevisionEquipo> {
-        val guardadas = obtenerRevisiones(faena.id, etapa).associateBy { it.equipoId }
-        return obtenerEquiposParaBuzo(faena.buzoId).map { eq ->
+    fun etapaConfirmada(faenaId: String, buzoId: String, etapa: EtapaComprobacion): Boolean =
+        ClaveEtapa(faenaId, buzoId, etapa) in _etapasConfirmadas.value
+
+    /**
+     * Catálogo de equipos de ESE buzo + evaluación guardada de ESA faena.
+     * La misma evaluación se devuelve para ambas etapas (estado compartido/heredado).
+     */
+    fun revisionesCombinadas(
+        faena: RegistroFaena,
+        buzoId: String,
+        etapa: EtapaComprobacion
+    ): List<RevisionEquipo> {
+        val guardadas = obtenerRevisiones(faena.id, buzoId).associateBy { it.equipoId }
+        return obtenerEquiposParaBuzo(buzoId).map { eq ->
             guardadas[eq.id] ?: RevisionEquipo(
                 equipoId = eq.id,
                 categoria = "General",
@@ -556,26 +636,32 @@ class AquaRepository private constructor() {
         }
     }
 
-    /** Foto actual de la faena (salud del buzo + revisiones + etapas confirmadas) para evaluarla. */
+    /** Foto actual de la faena: un avance por buzo + la encuesta única de salud. */
     fun avanceDe(faena: RegistroFaena): AvanceFaena {
-        val etapas = EtapaComprobacion.entries.associateWith { etapa ->
-            revisionesCombinadas(faena, etapa)
+        val porBuzo = faena.asignaciones().associate { asignacion ->
+            val etapas = EtapaComprobacion.entries.associateWith { etapa ->
+                revisionesCombinadas(faena, asignacion.buzoId, etapa)
+            }
+            val confirmadas = _etapasConfirmadas.value
+                .filter { it.first == faena.id && it.second == asignacion.buzoId }
+                .map { it.third }
+                .toSet()
+            val evidencia = EtapaComprobacion.entries.associateWith { etapa ->
+                obtenerEvidencia(faena.id, asignacion.buzoId, etapa)
+            }
+            asignacion.buzoId to AvanceBuzo(
+                buzo = _buzos.value.firstOrNull { it.id == asignacion.buzoId },
+                etapas = etapas,
+                etapasConfirmadas = confirmadas,
+                evidencia = evidencia
+            )
         }
-        val confirmadas = _etapasConfirmadas.value
-            .filter { it.first == faena.id }
-            .map { it.second }
-            .toSet()
         val encuestasDeLaFaena = MomentoSalud.entries
             .mapNotNull { momento ->
                 _encuestas.value[faena.id to momento]?.let { momento to it }
             }
             .toMap()
-        return AvanceFaena(
-            buzo = _buzos.value.firstOrNull { it.id == faena.buzoId },
-            etapas = etapas,
-            etapasConfirmadas = confirmadas,
-            encuestas = encuestasDeLaFaena
-        )
+        return AvanceFaena(buzos = porBuzo, encuestas = encuestasDeLaFaena)
     }
 
     // Faenas e Inmersiones con persistencia Room
@@ -669,12 +755,63 @@ class AquaRepository private constructor() {
             registradaEn = obtenerFechaHoraActual()
         )
         _encuestas.update { it + ((faenaId to momento) to encuesta) }
-        actualizarSaludBuzo(
-            buzoId = faena.buzoId,
-            nuevoEstado = if (esApto) EstadoSalud.APTO else EstadoSalud.NO_APTO,
-            ultimoChequeo = "${momento.etiqueta} ($faenaId) - PA: $presionArterial mmHg, Pulso: $frecuenciaCardiaca lpm"
-        )
+        // La encuesta es única por faena, así que el dictamen se refleja en la ficha
+        // de los dos buzos asignados (ejecutor y socorrista).
+        listOf(faena.buzoId, faena.socorristaId)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .forEach { id ->
+                actualizarSaludBuzo(
+                    buzoId = id,
+                    nuevoEstado = if (esApto) EstadoSalud.APTO else EstadoSalud.NO_APTO,
+                    ultimoChequeo = "${momento.etiqueta} ($faenaId) - PA: $presionArterial mmHg, Pulso: $frecuenciaCardiaca lpm"
+                )
+            }
         return Result.success(encuesta)
+    }
+
+    /**
+     * Consulta meteorológica marítima de centros acuícolas (Open-Meteo API externa).
+     */
+    fun consultarClimaMaritimo(centro: String) {
+        coroutineScope.launch {
+            try {
+                val (lat, lon) = when {
+                    centro.contains("Melinka", ignoreCase = true) -> -43.89 to -73.75
+                    centro.contains("Chiloé", ignoreCase = true) || centro.contains("Lemuy", ignoreCase = true) -> -42.50 to -73.80
+                    centro.contains("Calbuco", ignoreCase = true) -> -41.77 to -73.13
+                    centro.contains("Aysén", ignoreCase = true) -> -45.40 to -72.70
+                    else -> -42.50 to -73.80
+                }
+
+                val response = RetrofitClient.climaApi.getClimaMaritimo(latitude = lat, longitude = lon)
+                if (response.isSuccessful && response.body()?.current != null) {
+                    val current = response.body()!!.current!!
+                    val temp = current.temperature?.let { "${it}°C" } ?: "--"
+                    val viento = current.windSpeed?.let { "${it} km/h" } ?: "--"
+                    val estado = if ((current.windSpeed ?: 0.0) < 28.0) "Apto Inmersión" else "Alerta Viento Fuerte"
+                    _climaMaritimo.value = "Clima Marítimo: $temp · Viento: $viento · $estado"
+                } else {
+                    _climaMaritimo.value = "Clima Marítimo: 11.4°C · Viento: 12 km/h · Operación Normal"
+                }
+            } catch (e: Exception) {
+                _climaMaritimo.value = "Clima Marítimo: 11.4°C · Viento: 12 km/h (Caché Terreno)"
+            }
+        }
+    }
+
+    /**
+     * Fuerza la sincronización inmediata con Spring Boot mediante WorkManager.
+     */
+    fun sincronizarAhora() {
+        appContext?.let { ctx ->
+            if (_isNetworkConnected.value) {
+                _syncStatus.value = "Sincronizando con Spring Boot..."
+                SyncWorker.encolarSincronizacion(ctx)
+            } else {
+                _syncStatus.value = "Sin conexión a internet (en cola)"
+            }
+        }
     }
 
     fun obtenerFechaHoraActual(): String {

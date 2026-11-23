@@ -36,6 +36,7 @@ fun TrabajoScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var buzoDropdownOpen by remember { mutableStateOf(false) }
+    var socorristaDropdownOpen by remember { mutableStateOf(false) }
     var centroDropdownOpen by remember { mutableStateOf(false) }
     var faenaDropdownOpen by remember { mutableStateOf(false) }
 
@@ -78,12 +79,13 @@ fun TrabajoScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "1. Buzo Asignado a la Inmersión",
+                        text = "1. Tripulación: 2 buzos por faena",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = AquaPrimary
                     )
 
+                    Text("Buzo ejecutor (inmersión):", fontSize = 12.sp, color = AquaTextSecondary)
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(
                             onClick = { buzoDropdownOpen = true },
@@ -96,7 +98,7 @@ fun TrabajoScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = uiState.buzoSeleccionado?.let { "${it.nombre} (${it.empresa})" } ?: "Seleccionar buzo",
+                                    text = uiState.buzoSeleccionado?.let { "${it.nombre} (${it.empresa})" } ?: "Seleccionar buzo ejecutor",
                                     color = AquaTextPrimary,
                                     fontSize = 13.sp
                                 )
@@ -119,9 +121,46 @@ fun TrabajoScreen(
                         }
                     }
 
-                    if (uiState.esBuzoApto) {
+                    Text("Buzo socorrista (secundario):", fontSize = 12.sp, color = AquaTextSecondary)
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { socorristaDropdownOpen = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = uiState.socorristaSeleccionado?.let { "${it.nombre} (${it.empresa})" }
+                                        ?: "Seleccionar socorrista",
+                                    color = AquaTextPrimary,
+                                    fontSize = 13.sp
+                                )
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = socorristaDropdownOpen,
+                            onDismissRequest = { socorristaDropdownOpen = false }
+                        ) {
+                            uiState.socorristasDisponibles.forEach { buzo ->
+                                DropdownMenuItem(
+                                    text = { Text("${buzo.nombre} - [${buzo.estadoSalud.label}]") },
+                                    onClick = {
+                                        viewModel.seleccionarSocorrista(buzo.id)
+                                        socorristaDropdownOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    if (uiState.tripulacionCompleta) {
                         Surface(
-                            color = SafetyCardBgSuccess,
+                            color = if (uiState.esBuzoApto && uiState.esSocorristaApto) SafetyCardBgSuccess else SafetyCardBgDanger,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -129,36 +168,32 @@ fun TrabajoScreen(
                                 modifier = Modifier.padding(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = "Apto", tint = SafetySuccess, modifier = Modifier.size(18.dp))
+                                Icon(
+                                    imageVector = if (uiState.esBuzoApto && uiState.esSocorristaApto) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = if (uiState.esBuzoApto && uiState.esSocorristaApto) SafetySuccess else SafetyDanger,
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Buzo Apto para inmersión (Chequeo de salud al día)",
+                                    text = if (uiState.esBuzoApto && uiState.esSocorristaApto) {
+                                        "Tripulación completa: ambos buzos con chequeo al día."
+                                    } else {
+                                        "Uno o ambos buzos no están aptos. La encuesta de salud de la faena definirá el dictamen."
+                                    },
                                     fontSize = 12.sp,
-                                    color = SafetySuccess,
+                                    color = if (uiState.esBuzoApto && uiState.esSocorristaApto) SafetySuccess else SafetyDanger,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
                         }
                     } else {
-                        Surface(
-                            color = SafetyCardBgDanger,
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.Warning, contentDescription = "Alerta", tint = SafetyDanger, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Atención: El buzo no está apto. Debe validar la encuesta de salud antes de autorizar.",
-                                    fontSize = 12.sp,
-                                    color = SafetyDanger,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
+                        Text(
+                            text = "Debe asignar dos buzos distintos: el ejecutor y su socorrista.",
+                            fontSize = 12.sp,
+                            color = SafetyDanger,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
@@ -267,13 +302,38 @@ fun TrabajoScreen(
                         )
                     }
 
-                    OutlinedTextField(
-                        value = uiState.supervisor,
-                        onValueChange = { viewModel.onSupervisorChange(it) },
-                        label = { Text("Supervisor / Prevencionista a cargo") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                    Surface(
+                        color = if (uiState.supervisorActivo) Color.White else SafetyCardBgDanger,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.supervisorActivo) Icons.Default.Person else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = if (uiState.supervisorActivo) AquaPrimary else SafetyDanger,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Supervisor de la faena (según la sesión)",
+                                    fontSize = 11.sp,
+                                    color = AquaTextSecondary
+                                )
+                                Text(
+                                    text = if (uiState.supervisorActivo) uiState.supervisor
+                                    else "Inicie sesión como prevencionista para autorizar.",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (uiState.supervisorActivo) AquaTextPrimary else SafetyDanger
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -295,7 +355,7 @@ fun TrabajoScreen(
 
             Button(
                 onClick = { viewModel.autorizarFaena() },
-                enabled = uiState.esBuzoApto,
+                enabled = uiState.puedeAutorizar,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -308,7 +368,11 @@ fun TrabajoScreen(
                 Icon(Icons.Default.PlayArrow, contentDescription = "Iniciar", tint = Color.White)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (uiState.esBuzoApto) "AUTORIZAR E INICIAR FAENA" else "BUZO NO APTO (BLOQUEADO)",
+                    text = when {
+                        !uiState.supervisorActivo -> "INICIE SESIÓN COMO PREVENCIONISTA"
+                        !uiState.tripulacionCompleta -> "SELECCIONE EJECUTOR Y SOCORRISTA DISTINTOS"
+                        else -> "AUTORIZAR E INICIAR FAENA"
+                    },
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = Color.White
@@ -323,15 +387,30 @@ fun TrabajoScreen(
                 onDismissRequest = { viewModel.dismissSuccessDialog() },
                 title = { Text("¡Faena Autorizada!", fontWeight = FontWeight.Bold, color = SafetySuccess) },
                 text = {
-                    Text("La inmersión para ${uiState.buzoSeleccionado?.nombre} ha sido registrada y documentada en la bitácora central.")
+                    Text(
+                        "Faena ${uiState.faenaAutorizadaId.orEmpty()} de ${uiState.buzoSeleccionado?.nombre} " +
+                            "con socorrista ${uiState.socorristaSeleccionado?.nombre} registrada en la bitácora central. " +
+                            "Continúe con el control de equipos de ambos buzos."
+                    )
                 },
                 confirmButton = {
                     Button(
                         onClick = {
+                            viewModel.irAControlDeEquipos()
                             viewModel.dismissSuccessDialog()
-                            navController.navigate(Screen.Historial.route)
+                            navController.navigate(Screen.Equipos.route) { launchSingleTop = true }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
+                    ) {
+                        Text("Ir a Control de Equipos")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.dismissSuccessDialog()
+                            navController.navigate(Screen.Historial.route)
+                        }
                     ) {
                         Text("Ver Historial")
                     }

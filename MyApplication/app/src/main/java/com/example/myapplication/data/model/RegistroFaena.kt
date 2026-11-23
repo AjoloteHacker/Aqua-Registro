@@ -3,11 +3,21 @@ package com.example.myapplication.data.model
 /**
  * Registro de autorización e inmersión submarina.
  *
+ * Cada faena tiene DOS buzos asignados, que deben ser personas distintas:
+ * - [buzoId] / [buzoNombre]: buzo ejecutor de la inmersión;
+ * - [socorristaId] / [socorristaNombre]: socorrista (buzo secundario).
+ *
+ * Los registros de equipos (evaluación, fotos y etapas) son independientes por buzo
+ * y se capturan uno seguido del otro. La encuesta de salud es única por faena.
+ *
  * La faena sabe por sí misma si está lista para cerrarse. Flujo completo:
- *  1. Pre-equipación y 2. Equipado: revisión de equipos, confirmada por etapa.
+ *  1. Pre-equipación: estado individual de los equipos + una foto general, confirmado.
+ *  2. Equipado: mismo estado compartido + fotos de frente y atrás, confirmado.
  *  3. Encuesta de salud ANTES (con el buzo ya equipado).
  *  4. Aprobación de que los datos de la faena son correctos.
- *  5. Encuesta de salud DESPUÉS (cuando todo lo demás ya se revisó).
+ *  5. Encuesta de salud DESPUÉS: informativa. Es única por faena (cubre a ambos
+ *     buzos, incluido el socorrista) y NO se exige para finalizar; si da NO APTO
+ *     se reporta como novedad.
  *  6. Finalizar.
  *
  * No depende del repositorio ni de la UI: recibe el [AvanceFaena] como parámetro.
@@ -16,6 +26,8 @@ data class RegistroFaena(
     val id: String,
     val buzoId: String,
     val buzoNombre: String,
+    val socorristaId: String = "",
+    val socorristaNombre: String = "",
     val empresa: String,
     val centroCultivo: String,
     val tipoFaena: String,
@@ -29,26 +41,58 @@ data class RegistroFaena(
     val enCurso: Boolean get() = estado.contains("Curso", ignoreCase = true)
     val completada: Boolean get() = estado.contains("Completada", ignoreCase = true)
     val datosAprobados: Boolean get() = aprobacion != null
+    val socorristaAsignado: Boolean get() = socorristaId.isNotBlank() && socorristaNombre.isNotBlank()
+
+    /** Buzos asignados, en el orden en que se capturan los registros. */
+    fun asignaciones(): List<AsignacionBuzo> = buildList {
+        add(AsignacionBuzo(RolBuzo.EJECUTOR, buzoId, buzoNombre))
+        if (socorristaAsignado) {
+            add(AsignacionBuzo(RolBuzo.SOCORRISTA, socorristaId, socorristaNombre))
+        }
+    }
+
+    private fun tripulacion(): String =
+        if (socorristaAsignado) "$buzoNombre y $socorristaNombre" else buzoNombre
 
     // ───────────────────────── Cierre ─────────────────────────
 
     /**
      * Lo que falta para poder finalizar (bloquea el cierre), en el orden del flujo:
-     *  - equipos de ambas etapas completos y confirmados;
+     *  - dos buzos asignados y distintos;
+     *  - evaluación individual de los equipos de cada buzo (compartida entre etapas);
+     *  - evidencia y confirmación de cada etapa para cada buzo;
      *  - encuesta de salud ANTES registrada y con resultado APTO;
-     *  - datos de la faena aprobados;
-     *  - encuesta de salud DESPUÉS registrada (su resultado se reporta, no bloquea).
+     *  - datos de la faena aprobados.
+     *
+     * La encuesta DESPUÉS NO se exige: es informativa y cubre a ambos buzos,
+     * incluido el socorrista. Aunque falte, la faena se puede finalizar; si se
+     * registró con resultado NO APTO, se reporta en [novedades] sin bloquear.
      */
     fun pendientes(avance: AvanceFaena): List<Pendiente> {
         val faltantes = mutableListOf<Pendiente>()
 
-        if (avance.buzo == null) {
+        if (!socorristaAsignado) {
             faltantes.add(
-                Pendiente(CategoriaPendiente.DATOS, "Buzo $buzoNombre no encontrado en el sistema")
+                Pendiente(CategoriaPendiente.DATOS, "Socorrista: falta asignar el buzo secundario")
+            )
+        } else if (socorristaId == buzoId) {
+            faltantes.add(
+                Pendiente(CategoriaPendiente.DATOS, "Socorrista: debe ser distinto del buzo ejecutor")
             )
         }
 
-        faltantes.addAll(pendientesEquipos(avance))
+        asignaciones().forEach { asignacion ->
+            val avanceBuzo = avance.buzos[asignacion.buzoId] ?: AvanceBuzo(buzo = null)
+            if (avanceBuzo.buzo == null) {
+                faltantes.add(
+                    Pendiente(
+                        CategoriaPendiente.DATOS,
+                        "${asignacion.rol.etiqueta}: ${asignacion.buzoNombre} no encontrado en el sistema"
+                    )
+                )
+            }
+            faltantes.addAll(pendientesEquipos(asignacion.rol, avanceBuzo))
+        }
 
         val antes = avance.encuestas[MomentoSalud.ANTES]
         if (antes == null) {
@@ -57,7 +101,7 @@ data class RegistroFaena(
             )
         } else if (!antes.esApto) {
             faltantes.add(
-                Pendiente(CategoriaPendiente.SALUD, "Encuesta de salud ANTES: $buzoNombre resultó NO APTO")
+                Pendiente(CategoriaPendiente.SALUD, "Encuesta de salud ANTES: ${tripulacion()} resultó NO APTO")
             )
         }
 
@@ -67,37 +111,56 @@ data class RegistroFaena(
             )
         }
 
-        if (MomentoSalud.DESPUES !in avance.encuestas) {
-            faltantes.add(
-                Pendiente(CategoriaPendiente.SALUD, "Encuesta de salud DESPUÉS: sin registrar")
-            )
-        }
+        // La encuesta DESPUÉS (socorrista incluido) es informativa: nunca bloquea el cierre.
         return faltantes
     }
 
-    private fun pendientesEquipos(avance: AvanceFaena): List<Pendiente> {
+    private fun pendientesEquipos(rol: RolBuzo, avanceBuzo: AvanceBuzo): List<Pendiente> {
         val faltantes = mutableListOf<Pendiente>()
-        EtapaComprobacion.entries.forEach { etapa ->
-            val equipos = avance.etapas[etapa].orEmpty()
+
+        // La evaluación individual es compartida entre etapas: se informa una sola vez.
+        val equipos = avanceBuzo.etapas[EtapaComprobacion.PRE_EQUIPACION].orEmpty()
+        if (equipos.isEmpty()) {
+            faltantes.add(
+                Pendiente(
+                    CategoriaPendiente.EQUIPOS,
+                    "${rol.etiqueta}: no hay equipos registrados para revisar"
+                )
+            )
+        } else {
             val sinEstado = equipos.count { !it.tieneEstado }
-            val sinFoto = equipos.count { it.faltaFoto }
             val sinDescripcion = equipos.count { it.faltaDescripcion }
             val detalle = listOfNotNull(
                 "$sinEstado sin revisar".takeIf { sinEstado > 0 },
-                "$sinFoto sin foto".takeIf { sinFoto > 0 },
                 "$sinDescripcion sin descripción".takeIf { sinDescripcion > 0 }
             )
-            if (equipos.isEmpty()) {
+            if (detalle.isNotEmpty()) {
                 faltantes.add(
-                    Pendiente(CategoriaPendiente.EQUIPOS, "${etapa.etiqueta}: no hay equipos registrados para revisar")
+                    Pendiente(
+                        CategoriaPendiente.EQUIPOS,
+                        "${rol.etiqueta}: evaluación individual: ${detalle.joinToString(", ")}"
+                    )
                 )
-            } else if (detalle.isNotEmpty()) {
+            }
+        }
+
+        EtapaComprobacion.entries.forEach { etapa ->
+            val faltanFotos = (avanceBuzo.evidencia[etapa] ?: EvidenciaEquipos()).faltan(etapa)
+            if (faltanFotos.isNotEmpty()) {
+                val nombres = faltanFotos.joinToString(" y ") { it.etiqueta.lowercase() }
+                val verbo = if (faltanFotos.size == 1) "falta" else "faltan"
                 faltantes.add(
-                    Pendiente(CategoriaPendiente.EQUIPOS, "${etapa.etiqueta}: ${detalle.joinToString(", ")}")
+                    Pendiente(
+                        CategoriaPendiente.EQUIPOS,
+                        "${rol.etiqueta} · ${etapa.etiqueta}: $verbo $nombres"
+                    )
                 )
-            } else if (etapa !in avance.etapasConfirmadas) {
+            } else if (etapa !in avanceBuzo.etapasConfirmadas) {
                 faltantes.add(
-                    Pendiente(CategoriaPendiente.EQUIPOS, "${etapa.etiqueta}: falta confirmar la etapa")
+                    Pendiente(
+                        CategoriaPendiente.EQUIPOS,
+                        "${rol.etiqueta} · ${etapa.etiqueta}: falta confirmar la etapa"
+                    )
                 )
             }
         }
@@ -106,21 +169,24 @@ data class RegistroFaena(
 
     /**
      * Novedades que se reportan pero NO bloquean el cierre:
-     * equipos riesgosos o inutilizables, y un resultado NO APTO en la encuesta DESPUÉS.
+     * equipos riesgosos o inutilizables de cada buzo (la evaluación es compartida,
+     * se listan una vez por buzo), y un resultado NO APTO en la encuesta DESPUÉS.
      */
     fun novedades(avance: AvanceFaena): List<String> {
         val lista = mutableListOf<String>()
-        EtapaComprobacion.entries.forEach { etapa ->
-            avance.etapas[etapa].orEmpty()
+        asignaciones().forEach { asignacion ->
+            val avanceBuzo = avance.buzos[asignacion.buzoId] ?: return@forEach
+            avanceBuzo.etapas[EtapaComprobacion.PRE_EQUIPACION].orEmpty()
                 .filter {
                     it.estado == EstadoEquipo.UTILIZABLE_RIESGOSO ||
                         it.estado == EstadoEquipo.INUTILIZABLE
                 }
-                .forEach { lista.add("${etapa.etiqueta}: ${it.nombre} (${it.estado.etiqueta})") }
+                .distinctBy { it.equipoId }
+                .forEach { lista.add("${asignacion.rol.etiqueta}: ${it.nombre} (${it.estado.etiqueta})") }
         }
         val despues = avance.encuestas[MomentoSalud.DESPUES]
         if (despues != null && !despues.esApto) {
-            lista.add("Encuesta de salud DESPUÉS: $buzoNombre resultó NO APTO (revisar posible incidente)")
+            lista.add("Encuesta de salud DESPUÉS: ${tripulacion()} resultó NO APTO (revisar posible incidente)")
         }
         return lista
     }
@@ -144,40 +210,12 @@ data class RegistroFaena(
 
     /**
      * Motivo por el que todavía no se puede registrar la encuesta de [momento]
-     * (null si ya está habilitada):
-     *  - ANTES: requiere la etapa «Equipado» confirmada (el buzo ya está equipado).
-     *  - DESPUÉS: requiere equipos completos y confirmados, encuesta ANTES y datos aprobados.
+     * (null si ya está habilitada). La encuesta es única por faena y solo requiere
+     * que la faena esté en curso.
      */
     fun bloqueoEncuesta(momento: MomentoSalud, avance: AvanceFaena): String? {
         if (!enCurso) return "La faena $id ya no está en curso."
-        return when (momento) {
-            MomentoSalud.ANTES ->
-                if (EtapaComprobacion.EQUIPADO in avance.etapasConfirmadas) {
-                    null
-                } else {
-                    "Primero confirma la etapa «Equipado» en Control de Equipos: " +
-                        "la encuesta ANTES se aplica con el buzo ya equipado."
-                }
-
-            MomentoSalud.DESPUES -> {
-                val faltan = mutableListOf<String>()
-                if (pendientesEquipos(avance).isNotEmpty()) {
-                    faltan.add("completar y confirmar la revisión de equipos")
-                }
-                if (MomentoSalud.ANTES !in avance.encuestas) {
-                    faltan.add("registrar la encuesta ANTES")
-                }
-                if (!datosAprobados) {
-                    faltan.add("aprobar los datos de la faena")
-                }
-                if (faltan.isEmpty()) {
-                    null
-                } else {
-                    "La encuesta DESPUÉS se habilita cuando todo lo demás está revisado. " +
-                        "Falta: ${faltan.joinToString(", ")}."
-                }
-            }
-        }
+        return null
     }
 
     // ───────────────────────── Datos de la faena ─────────────────────────
@@ -241,6 +279,19 @@ data class RegistroFaena(
     }
 }
 
+/** Rol que cumple un buzo dentro de la faena. */
+enum class RolBuzo(val etiqueta: String, val corto: String) {
+    EJECUTOR("Buzo ejecutor", "Ejecutor"),
+    SOCORRISTA("Socorrista (buzo secundario)", "Socorrista")
+}
+
+/** Buzo asignado a una faena junto con el rol que cumple. */
+data class AsignacionBuzo(
+    val rol: RolBuzo,
+    val buzoId: String,
+    val buzoNombre: String
+)
+
 /** Quién aprobó que los datos de la faena son correctos, y cuándo. */
 data class AprobacionDatos(
     val aprobadoPor: String,
@@ -255,12 +306,20 @@ data class Pendiente(
     val detalle: String
 )
 
+/** Checklist, evidencia y etapas de UN buzo dentro de una faena. */
+data class AvanceBuzo(
+    val buzo: Buzo?,
+    val etapas: Map<EtapaComprobacion, List<RevisionEquipo>> = emptyMap(),
+    val etapasConfirmadas: Set<EtapaComprobacion> = emptySet(),
+    val evidencia: Map<EtapaComprobacion, EvidenciaEquipos> = emptyMap()
+)
+
 /** Foto actual de lo que se ha comprobado para la faena. */
 data class AvanceFaena(
-    val buzo: Buzo?,
-    val etapas: Map<EtapaComprobacion, List<RevisionEquipo>>,
-    val etapasConfirmadas: Set<EtapaComprobacion>,
-    val encuestas: Map<MomentoSalud, EncuestaSalud>
+    /** Clave = id del buzo; incluye al ejecutor y al socorrista asignado. */
+    val buzos: Map<String, AvanceBuzo> = emptyMap(),
+    /** La encuesta de salud es única por faena y momento. */
+    val encuestas: Map<MomentoSalud, EncuestaSalud> = emptyMap()
 )
 
 class FaenaIncompletaException(

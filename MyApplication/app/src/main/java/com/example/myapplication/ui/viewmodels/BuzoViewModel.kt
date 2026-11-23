@@ -10,6 +10,7 @@ import com.example.myapplication.util.Rutificador
 import com.example.myapplication.util.SecurityUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 data class BuzoUiState(
     val buzos: List<Buzo> = emptyList(),
@@ -26,6 +27,11 @@ data class BuzoUiState(
     val nuevoTelefono: String = "",
     val nuevaVigencia: String = "Al día",
     val nuevaFotoUrl: String = "",
+    val nuevaEstatura: Float? = 1.75f,
+    val nuevoPeso: Float? = 78f,
+    val nuevaTalla: Float? = 42f,
+    val nuevasAlergias: String = "",
+    val nuevaEdad: LocalDate? = null,
     val cargandoFoto: Boolean = false,
     val empresaSeleccionada: String = "",
     val empresasDisponibles: List<String> = emptyList(),
@@ -106,6 +112,15 @@ class BuzoViewModel(
         }
     }
 
+    fun onPesoChange(v: String) = _uiState.update {
+        it.copy(nuevoPeso = v.toFloatOrNull(), error = null)
+    }
+    fun onEstaturaChange(v: String) = _uiState.update {
+        it.copy(nuevaEstatura = v.toFloatOrNull(), error = null)
+    }
+    fun onTallaChange(v: String) = _uiState.update {
+        it.copy(nuevaTalla = v.toFloatOrNull(), error = null)
+    }
     fun onSearchQueryChange(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
     }
@@ -126,6 +141,11 @@ class BuzoViewModel(
                 nuevoTelefono = "",
                 nuevaVigencia = vigenciasDisponibles.first(),
                 nuevaFotoUrl = RandomUserGenerator.generarUrlFallback(),
+                nuevaEstatura = 1.75f,
+                nuevoPeso = 78f,
+                nuevaTalla = 42f,
+                nuevasAlergias = "",
+                nuevaEdad = null,
                 empresaSeleccionada = it.empresasDisponibles.firstOrNull() ?: "",
                 error = null
             )
@@ -145,6 +165,11 @@ class BuzoViewModel(
                 nuevaVigencia = if (buzo.vigenciaMatricula in vigenciasDisponibles) buzo.vigenciaMatricula else vigenciasDisponibles.first(),
                 empresaSeleccionada = buzo.empresa,
                 nuevaFotoUrl = buzo.fotoUrl ?: RandomUserGenerator.generarUrlFallback(),
+                nuevaEstatura = buzo.estatura ?: 1.75f,
+                nuevaTalla = buzo.talla ?: 42f,
+                nuevoPeso = buzo.peso ?: 78f,
+                nuevasAlergias = buzo.alergias ?: "",
+                nuevaEdad = buzo.edad,
                 error = null
             )
         }
@@ -223,6 +248,12 @@ class BuzoViewModel(
     fun openNuevaEmpresaDialog() = _uiState.update { it.copy(showNuevaEmpresaDialog = true, nuevaEmpresaNombre = "") }
     fun closeNuevaEmpresaDialog() = _uiState.update { it.copy(showNuevaEmpresaDialog = false, nuevaEmpresaNombre = "") }
     fun onNuevaEmpresaNombreChange(v: String) = _uiState.update { it.copy(nuevaEmpresaNombre = v) }
+    fun onNuevasAlergiasChange(valor: String) {
+        _uiState.update { it.copy(nuevasAlergias = valor) }
+    }
+    fun onNuevaEdadChange(valor: LocalDate) {
+        _uiState.update { it.copy(nuevaEdad = valor) }
+    }
 
     fun guardarNuevaEmpresa() {
         val nombre = _uiState.value.nuevaEmpresaNombre.trim()
@@ -290,7 +321,12 @@ class BuzoViewModel(
                 vigenciaMatricula = state.nuevaVigencia,
                 estadoSalud = EstadoSalud.PENDIENTE,
                 ultimoChequeo = "Pendiente de faena",
-                fotoUrl = state.nuevaFotoUrl.ifBlank { RandomUserGenerator.generarUrlFallback() }
+                fotoUrl = state.nuevaFotoUrl.ifBlank { RandomUserGenerator.generarUrlFallback() },
+                estatura = state.nuevaEstatura,
+                talla = state.nuevaTalla,
+                peso = state.nuevoPeso,
+                alergias = state.nuevasAlergias,
+                edad = state.nuevaEdad
             )
 
             val result = repository.agregarBuzo(nuevo)
@@ -302,6 +338,11 @@ class BuzoViewModel(
                         nuevoRut = "",
                         nuevaMatricula = "",
                         nuevoTelefono = "",
+                        nuevaEstatura = 1.75f,
+                        nuevoPeso = 78f,
+                        nuevaTalla = 42f,
+                        nuevasAlergias = "",
+                        nuevaEdad = null,
                         userMessage = "Buzo ${buzoAgregado.nombre} enrolado exitosamente.",
                         error = null
                     )
@@ -319,7 +360,12 @@ class BuzoViewModel(
                 telefono = telefonoFinal,
                 categoria = state.nuevaCategoria,
                 vigenciaMatricula = state.nuevaVigencia,
-                fotoUrl = state.nuevaFotoUrl.ifBlank { buzoAEditar.fotoUrl ?: RandomUserGenerator.generarUrlFallback() }
+                fotoUrl = state.nuevaFotoUrl.ifBlank { buzoAEditar.fotoUrl ?: RandomUserGenerator.generarUrlFallback() },
+                estatura = state.nuevaEstatura,
+                talla = state.nuevaTalla,
+                peso = state.nuevoPeso,
+                alergias = state.nuevasAlergias,
+                edad = state.nuevaEdad
             )
 
             val result = repository.editarBuzo(actualizado)
@@ -332,6 +378,11 @@ class BuzoViewModel(
                         nuevoRut = "",
                         nuevaMatricula = "",
                         nuevoTelefono = "",
+                        nuevaEstatura = 1.75f,
+                        nuevoPeso = 78f,
+                        nuevaTalla = 42f,
+                        nuevasAlergias = "",
+                        nuevaEdad = null,
                         buzoDetalle = if (it.buzoDetalle?.id == buzoEditado.id) buzoEditado else it.buzoDetalle,
                         userMessage = "Ficha de ${buzoEditado.nombre} actualizada correctamente.",
                         error = null
