@@ -15,7 +15,9 @@ package com.example.myapplication.data.model
  *  2. Equipado: mismo estado compartido + fotos de frente y atrás, confirmado.
  *  3. Encuesta de salud ANTES (con el buzo ya equipado).
  *  4. Aprobación de que los datos de la faena son correctos.
- *  5. Encuesta de salud DESPUÉS (cuando todo lo demás ya se revisó).
+ *  5. Encuesta de salud DESPUÉS: informativa. Es única por faena (cubre a ambos
+ *     buzos, incluido el socorrista) y NO se exige para finalizar; si da NO APTO
+ *     se reporta como novedad.
  *  6. Finalizar.
  *
  * No depende del repositorio ni de la UI: recibe el [AvanceFaena] como parámetro.
@@ -60,8 +62,11 @@ data class RegistroFaena(
      *  - evaluación individual de los equipos de cada buzo (compartida entre etapas);
      *  - evidencia y confirmación de cada etapa para cada buzo;
      *  - encuesta de salud ANTES registrada y con resultado APTO;
-     *  - datos de la faena aprobados;
-     *  - encuesta de salud DESPUÉS registrada (su resultado se reporta, no bloquea).
+     *  - datos de la faena aprobados.
+     *
+     * La encuesta DESPUÉS NO se exige: es informativa y cubre a ambos buzos,
+     * incluido el socorrista. Aunque falte, la faena se puede finalizar; si se
+     * registró con resultado NO APTO, se reporta en [novedades] sin bloquear.
      */
     fun pendientes(avance: AvanceFaena): List<Pendiente> {
         val faltantes = mutableListOf<Pendiente>()
@@ -106,11 +111,7 @@ data class RegistroFaena(
             )
         }
 
-        if (MomentoSalud.DESPUES !in avance.encuestas) {
-            faltantes.add(
-                Pendiente(CategoriaPendiente.SALUD, "Encuesta de salud DESPUÉS: sin registrar")
-            )
-        }
+        // La encuesta DESPUÉS (socorrista incluido) es informativa: nunca bloquea el cierre.
         return faltantes
     }
 

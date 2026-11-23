@@ -587,7 +587,7 @@ fun RevisionFaenaDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Todo verificado. La faena puede finalizarse.",
+                            text = "Todo verificado. La faena puede finalizarse (la encuesta DESPUÉS es informativa).",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = SafetySuccess

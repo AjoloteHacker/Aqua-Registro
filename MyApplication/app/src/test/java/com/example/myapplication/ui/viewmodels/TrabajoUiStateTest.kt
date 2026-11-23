@@ -23,12 +23,28 @@ class TrabajoUiStateTest {
         val state = TrabajoUiState(
             buzos = buzos,
             buzoSeleccionadoId = "1",
-            socorristaSeleccionadoId = "2"
+            socorristaSeleccionadoId = "2",
+            supervisor = "Cristóbal Loncón (SEREMI: PR-10892-X)"
         )
 
         assertTrue(state.tripulacionCompleta)
+        assertTrue(state.supervisorActivo)
         assertTrue(state.puedeAutorizar)
         assertEquals("Pedro Almonacid Vera", state.socorristaSeleccionado?.nombre)
+    }
+
+    @Test
+    fun sinPrevencionistaEnSesion_noPuedeAutorizar() {
+        val state = TrabajoUiState(
+            buzos = buzos,
+            buzoSeleccionadoId = "1",
+            socorristaSeleccionadoId = "2",
+            supervisor = ""
+        )
+
+        assertTrue(state.tripulacionCompleta)
+        assertFalse(state.supervisorActivo)
+        assertFalse(state.puedeAutorizar)
     }
 
     @Test

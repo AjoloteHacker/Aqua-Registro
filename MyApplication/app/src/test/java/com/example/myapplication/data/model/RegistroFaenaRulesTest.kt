@@ -144,6 +144,34 @@ class RegistroFaenaRulesTest {
     }
 
     @Test
+    fun encuestaDespuesNoSeExigeParaCerrar_ySuResultadoSeReportaComoNovedad() {
+        val faenaAprobada = faenaBase.aprobar("Cristóbal Loncón", "21/11/2026 10:00").getOrThrow()
+        val sinDespues = avance(
+            encuestas = mapOf(MomentoSalud.ANTES to crearEncuestaApto(MomentoSalud.ANTES))
+        )
+
+        assertTrue(faenaAprobada.puedeFinalizar(sinDespues))
+        assertTrue(faenaAprobada.finalizar(sinDespues).isSuccess)
+        assertTrue(faenaAprobada.novedades(sinDespues).isEmpty())
+
+        val despuesNoApto = crearEncuestaApto(MomentoSalud.DESPUES).copy(esApto = false)
+        val conDespuesNoApto = avance(
+            encuestas = mapOf(
+                MomentoSalud.ANTES to crearEncuestaApto(MomentoSalud.ANTES),
+                MomentoSalud.DESPUES to despuesNoApto
+            )
+        )
+
+        assertTrue(faenaAprobada.puedeFinalizar(conDespuesNoApto))
+        assertFalse(faenaAprobada.pendientes(conDespuesNoApto).any { it.categoria == CategoriaPendiente.SALUD })
+        assertTrue(
+            faenaAprobada.novedades(conDespuesNoApto).any {
+                it.contains("DESPUÉS") && it.contains("NO APTO")
+            }
+        )
+    }
+
+    @Test
     fun encuestaUnicaPorFaena_noGeneraPendientesDuplicadosPorBuzo() {
         val faenaAprobada = faenaBase.aprobar("Cristóbal Loncón", "21/11/2026 10:00").getOrThrow()
 

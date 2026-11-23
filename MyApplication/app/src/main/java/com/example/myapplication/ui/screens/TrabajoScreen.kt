@@ -302,13 +302,38 @@ fun TrabajoScreen(
                         )
                     }
 
-                    OutlinedTextField(
-                        value = uiState.supervisor,
-                        onValueChange = { viewModel.onSupervisorChange(it) },
-                        label = { Text("Supervisor / Prevencionista a cargo") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
+                    Surface(
+                        color = if (uiState.supervisorActivo) Color.White else SafetyCardBgDanger,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.supervisorActivo) Icons.Default.Person else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = if (uiState.supervisorActivo) AquaPrimary else SafetyDanger,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Supervisor de la faena (según la sesión)",
+                                    fontSize = 11.sp,
+                                    color = AquaTextSecondary
+                                )
+                                Text(
+                                    text = if (uiState.supervisorActivo) uiState.supervisor
+                                    else "Inicie sesión como prevencionista para autorizar.",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (uiState.supervisorActivo) AquaTextPrimary else SafetyDanger
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -343,8 +368,11 @@ fun TrabajoScreen(
                 Icon(Icons.Default.PlayArrow, contentDescription = "Iniciar", tint = Color.White)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (uiState.puedeAutorizar) "AUTORIZAR E INICIAR FAENA"
-                    else "SELECCIONE EJECUTOR Y SOCORRISTA DISTINTOS",
+                    text = when {
+                        !uiState.supervisorActivo -> "INICIE SESIÓN COMO PREVENCIONISTA"
+                        !uiState.tripulacionCompleta -> "SELECCIONE EJECUTOR Y SOCORRISTA DISTINTOS"
+                        else -> "AUTORIZAR E INICIAR FAENA"
+                    },
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
                     color = Color.White
@@ -360,17 +388,29 @@ fun TrabajoScreen(
                 title = { Text("¡Faena Autorizada!", fontWeight = FontWeight.Bold, color = SafetySuccess) },
                 text = {
                     Text(
-                        "La inmersión de ${uiState.buzoSeleccionado?.nombre} con socorrista " +
-                            "${uiState.socorristaSeleccionado?.nombre} ha sido registrada y documentada en la bitácora central."
+                        "Faena ${uiState.faenaAutorizadaId.orEmpty()} de ${uiState.buzoSeleccionado?.nombre} " +
+                            "con socorrista ${uiState.socorristaSeleccionado?.nombre} registrada en la bitácora central. " +
+                            "Continúe con el control de equipos de ambos buzos."
                     )
                 },
                 confirmButton = {
                     Button(
                         onClick = {
+                            viewModel.irAControlDeEquipos()
                             viewModel.dismissSuccessDialog()
-                            navController.navigate(Screen.Historial.route)
+                            navController.navigate(Screen.Equipos.route) { launchSingleTop = true }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
+                    ) {
+                        Text("Ir a Control de Equipos")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.dismissSuccessDialog()
+                            navController.navigate(Screen.Historial.route)
+                        }
                     ) {
                         Text("Ver Historial")
                     }
