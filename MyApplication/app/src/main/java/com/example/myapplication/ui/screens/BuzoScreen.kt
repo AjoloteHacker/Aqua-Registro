@@ -1,6 +1,8 @@
 
 package com.example.myapplication.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,7 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -33,7 +39,9 @@ import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.components.RuedaSelectorCard
 import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.BuzoUiState
 import com.example.myapplication.ui.viewmodels.BuzoViewModel
+import com.example.myapplication.util.PaisTelefono
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -49,10 +57,6 @@ fun BuzoScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var mostrarDatePicker by remember { mutableStateOf(false) }
-    var empresaDropdownExpanded by remember { mutableStateOf(false) }
-    var categoriaDropdownExpanded by remember { mutableStateOf(false) }
-    var vigenciaDropdownExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.userMessage) {
         uiState.userMessage?.let {
@@ -222,363 +226,19 @@ fun BuzoScreen(
                             buzo = buzo,
                             onClick = { viewModel.openDetalle(buzo) },
                             onEdit = { viewModel.openEditDialog(buzo) },
-                            onDelete = { viewModel.solicitarEliminar(buzo) }
+                            onDelete = { viewModel.solicitarEliminar(buzo) },
+                            onToggleAlertaNoInvasiva = { viewModel.alternarAlertaNoInvasiva(buzo.id) }
                         )
                     }
                 }
             }
         }
 
-        // Diálogo para Registrar / Editar Buzo
-        if (uiState.showAddDialog) {
-            val esModoEdicion = uiState.buzoAEditar != null
-            AlertDialog(
-                onDismissRequest = { viewModel.closeAddDialog() },
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = if (esModoEdicion) Icons.Default.Edit else Icons.Default.PersonAdd,
-                            contentDescription = null,
-                            tint = AquaPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (esModoEdicion) "Editar Buzo" else "Registrar Nuevo Buzo",
-                            fontWeight = FontWeight.Bold,
-                            color = AquaPrimary
-                        )
-                    }
-                },
-                text = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        // Generador de foto con Random User
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(AquaPrimary.copy(alpha = 0.06f))
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(
-                                model = uiState.nuevaFotoUrl.ifBlank { "https://randomuser.me/api/portraits/men/1.jpg" },
-                                contentDescription = "Foto de perfil",
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(CircleShape)
-                                    .background(AquaPrimary.copy(alpha = 0.15f)),
-                                contentScale = ContentScale.Crop
-                            )
-
-                            Spacer(Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Foto de Perfil (Random User)",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = AquaTextSecondary
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                OutlinedButton(
-                                    onClick = { viewModel.generarFotoAleatoria() },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    enabled = !uiState.cargandoFoto
-                                ) {
-                                    if (uiState.cargandoFoto) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(14.dp),
-                                            strokeWidth = 2.dp,
-                                            color = AquaPrimary
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Cargando...", fontSize = 11.sp)
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Generar otra foto", fontSize = 11.sp)
-                                    }
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = uiState.nuevoNombre,
-                            onValueChange = { viewModel.onNuevoNombreChange(it) },
-                            label = { Text("Nombre y Apellidos *") },
-                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        OutlinedTextField(
-                            value = uiState.nuevoRut,
-                            onValueChange = { viewModel.onNuevoRutChange(it) },
-                            label = { Text("RUT (ej: 18.234.567-8) *") },
-                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        // Peso, estatura y talla
-                        val opcionesPeso = remember { (45..140).map { it.toString() } }
-                        val opcionesEstatura = remember {
-                            (145..210).map { String.format(Locale.US, "%.2f", it / 100.0) }
-                        }
-                        val opcionesTallaRopa = remember { (36..48).map { it.toString() } }
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                RuedaSelectorCard(
-                                    titulo = "Peso Corporal",
-                                    unidad = "kg",
-                                    icono = Icons.Default.MonitorWeight,
-                                    opciones = opcionesPeso,
-                                    valorSeleccionado = uiState.nuevoPeso?.toInt()?.toString() ?: "78",
-                                    onValorChange = { viewModel.onPesoChange(it) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                RuedaSelectorCard(
-                                    titulo = "Estatura",
-                                    unidad = "m",
-                                    icono = Icons.Default.Height,
-                                    opciones = opcionesEstatura,
-                                    valorSeleccionado = uiState.nuevaEstatura?.let { String.format(Locale.US, "%.2f", it) } ?: "1.75",
-                                    onValorChange = { viewModel.onEstaturaChange(it) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            RuedaSelectorCard(
-                                titulo = "Talla",
-                                unidad = "",
-                                icono = Icons.Default.Person,
-                                opciones = opcionesTallaRopa,
-                                valorSeleccionado = uiState.nuevaTalla?.toInt()?.toString() ?: "42",
-                                onValorChange = { viewModel.onTallaChange(it) },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        // Alergias
-                        OutlinedTextField(
-                            value = uiState.nuevasAlergias,
-                            onValueChange = { viewModel.onNuevasAlergiasChange(it) },
-                            label = { Text("Alergias") },
-                            placeholder = { Text("ej: Penicilina, ninguna") },
-                            leadingIcon = { Icon(Icons.Default.MedicalServices, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Fecha de nacimiento
-                        OutlinedTextField(
-                            value = uiState.nuevaEdad?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) ?: "",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Fecha de nacimiento") },
-                            placeholder = { Text("dd/MM/aaaa") },
-                            leadingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
-                            trailingIcon = {
-                                IconButton(onClick = { mostrarDatePicker = true }) {
-                                    Icon(Icons.Default.EditCalendar, contentDescription = "Seleccionar fecha")
-                                }
-                            },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (mostrarDatePicker) {
-                            val datePickerState = rememberDatePickerState(
-                                selectableDates = object : SelectableDates {
-                                    override fun isSelectableDate(utcTimeMillis: Long) =
-                                        utcTimeMillis <= System.currentTimeMillis() // sin fechas futuras
-                                }
-                            )
-                            DatePickerDialog(
-                                onDismissRequest = { mostrarDatePicker = false },
-                                confirmButton = {
-                                    TextButton(
-                                        onClick = {
-                                            datePickerState.selectedDateMillis?.let { millis ->
-                                                val fecha = Instant.ofEpochMilli(millis)
-                                                    .atZone(ZoneOffset.UTC)
-                                                    .toLocalDate()
-                                                viewModel.onNuevaEdadChange(fecha)
-                                            }
-                                            mostrarDatePicker = false
-                                        },
-                                        enabled = datePickerState.selectedDateMillis != null
-                                    ) { Text("Aceptar") }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") }
-                                }
-                            ) {
-                                DatePicker(state = datePickerState)
-                            }
-                        }
-
-
-                        // Selector de Categoría DIRECTEMAR
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { categoriaDropdownExpanded = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Categoría: ${uiState.nuevaCategoria}", fontSize = 13.sp, color = AquaTextPrimary)
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = categoriaDropdownExpanded,
-                                onDismissRequest = { categoriaDropdownExpanded = false }
-                            ) {
-                                viewModel.categoriasDisponibles.forEach { cat ->
-                                    DropdownMenuItem(
-                                        text = { Text(cat) },
-                                        onClick = {
-                                            viewModel.onNuevaCategoriaChange(cat)
-                                            categoriaDropdownExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = uiState.nuevaMatricula,
-                            onValueChange = { viewModel.onNuevaMatriculaChange(it) },
-                            label = { Text("Matrícula Marítima DIRECTEMAR") },
-                            placeholder = { Text("ej: Matrícula N° 2394") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        OutlinedTextField(
-                            value = uiState.nuevoTelefono,
-                            onValueChange = { viewModel.onNuevoTelefonoChange(it) },
-                            label = { Text("Teléfono de Contacto") },
-                            placeholder = { Text("+56 9 8451 2290") },
-                            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Selector de Empresa
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { empresaDropdownExpanded = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Empresa: ${uiState.empresaSeleccionada.take(20)}${if (uiState.empresaSeleccionada.length > 20) "..." else ""}",
-                                        fontSize = 13.sp,
-                                        color = AquaTextPrimary
-                                    )
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = empresaDropdownExpanded,
-                                onDismissRequest = { empresaDropdownExpanded = false }
-                            ) {
-                                uiState.empresasDisponibles.forEach { emp ->
-                                    DropdownMenuItem(
-                                        text = { Text(emp) },
-                                        onClick = {
-                                            viewModel.onEmpresaSeleccionadaChange(emp)
-                                            empresaDropdownExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        // Selector de Vigencia de Matrícula
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { vigenciaDropdownExpanded = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Vigencia Matrícula: ${uiState.nuevaVigencia}", fontSize = 13.sp, color = AquaTextPrimary)
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = vigenciaDropdownExpanded,
-                                onDismissRequest = { vigenciaDropdownExpanded = false }
-                            ) {
-                                viewModel.vigenciasDisponibles.forEach { vig ->
-                                    DropdownMenuItem(
-                                        text = { Text(vig) },
-                                        onClick = {
-                                            viewModel.onNuevaVigenciaChange(vig)
-                                            vigenciaDropdownExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        if (uiState.error != null) {
-                            Text(
-                                text = uiState.error ?: "",
-                                color = SafetyDanger,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { viewModel.guardarBuzo() },
-                        colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
-                    ) {
-                        Text(if (esModoEdicion) "Actualizar Buzo" else "Guardar Buzo")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.closeAddDialog() }) {
-                        Text("Cancelar")
-                    }
-                }
-            )
-        }
+        // Diálogos unificados de Registro / Edición de Buzo y Nueva Empresa Contratista
+        RegistrarEditarBuzoDialogs(
+            uiState = uiState,
+            viewModel = viewModel
+        )
 
         // Diálogo Ficha Técnica / Detalle del Buzo
         uiState.buzoDetalle?.let { buzo ->
@@ -614,6 +274,28 @@ fun BuzoScreen(
                     ) {
                         HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
 
+                        if (buzo.bloqueadoPorEdadSinTestEsfuerzo) {
+                            Surface(
+                                color = SafetyCardBgDanger,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Block, contentDescription = null, tint = SafetyDanger, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "SEMÁFORO ROJO: ${buzo.edadAnios} años (>45) sin Test de Esfuerzo vigente",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SafetyDanger
+                                    )
+                                }
+                            }
+                        }
+
                         FichaItem(label = "Estado de Salud", valor = buzo.estadoSalud.label)
                         FichaItem(label = "Último Chequeo", valor = buzo.ultimoChequeo)
                         FichaItem(label = "Categoría", valor = buzo.categoria)
@@ -622,40 +304,65 @@ fun BuzoScreen(
                         FichaItem(label = "Empresa Contratista", valor = buzo.empresa)
                         FichaItem(label = "Teléfono de Contacto", valor = buzo.telefono)
 
-                        Spacer(Modifier.height(6.dp))
                         HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
-                        Spacer(Modifier.height(2.dp))
-
                         Text(
-                            text = "Acciones Operativas Rápidas:",
+                            text = "Ficha de Salud y Acreditación:",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
-                            color = AquaTextPrimary
+                            color = AquaPrimary
                         )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.closeDetalle()
-                                    navController.navigate(Screen.Equipos.route)
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp)
+                        FichaItem(
+                            label = "Edad / Nacimiento",
+                            valor = buzo.edadAnios?.let {
+                                "$it años (${buzo.edad?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) ?: ""})"
+                            } ?: "No registrada"
+                        )
+                        FichaItem(
+                            label = "Estatura y Peso",
+                            valor = "${buzo.estatura?.let { String.format(Locale.US, "%.2f m", it) } ?: "--"} · ${buzo.peso?.let { "${it.toInt()} kg" } ?: "--"}"
+                        )
+                        FichaItem(
+                            label = "IMC Calculado",
+                            valor = buzo.imc?.let { String.format(Locale.US, "%.1f kg/m²", it) } ?: "No calculado"
+                        )
+                        FichaItem(
+                            label = "Talla de Traje",
+                            valor = buzo.talla?.toInt()?.toString() ?: "No registrada"
+                        )
+                        FichaItem(
+                            label = "Alergias",
+                            valor = buzo.alergias?.takeIf { it.isNotBlank() } ?: "Ninguna conocida"
+                        )
+                        FichaItem(
+                            label = "Test de Esfuerzo",
+                            valor = if (buzo.testEsfuerzoVigente) "Vigente" else "VENCIDO / NO VIGENTE"
+                        )
+                        FichaItem(
+                            label = "Escuela Buceo Calbuco",
+                            valor = "${buzo.puntajeCalbuco}/100 pts"
+                        )
+                        FichaItem(
+                            label = "Certificado ACHS (PDF)",
+                            valor = buzo.certificadoAchsUri?.substringAfterLast('/') ?: "No adjuntado"
+                        )
+                        if (buzo.matriculaAdvertencia60a15Dias) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Equipos", fontSize = 12.sp)
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.closeDetalle()
-                                    navController.navigate(Screen.Salud.route)
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("Salud", fontSize = 12.sp)
+                                Text(
+                                    text = "Alerta matrícula (${buzo.diasRestantesMatricula} días):",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFB45309),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                TextButton(onClick = { viewModel.alternarAlertaNoInvasiva(buzo.id) }) {
+                                    Text(
+                                        text = if (buzo.alertaMatriculaNoInvasiva) "Volver invasiva" else "Pasar a no invasiva",
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -712,6 +419,590 @@ fun BuzoScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RegistrarEditarBuzoDialogs(
+    uiState: BuzoUiState,
+    viewModel: BuzoViewModel
+) {
+    var mostrarDatePicker by remember { mutableStateOf(false) }
+    var empresaDropdownExpanded by remember { mutableStateOf(false) }
+    var categoriaDropdownExpanded by remember { mutableStateOf(false) }
+    var vigenciaDropdownExpanded by remember { mutableStateOf(false) }
+
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.onCertificadoAchsChange(it.toString()) }
+    }
+
+    if (uiState.showAddDialog) {
+        val esModoEdicion = uiState.buzoAEditar != null
+        AlertDialog(
+            onDismissRequest = { viewModel.closeAddDialog() },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (esModoEdicion) Icons.Default.Edit else Icons.Default.PersonAdd,
+                        contentDescription = null,
+                        tint = AquaPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (esModoEdicion) "Editar Buzo" else "Registrar Nuevo Buzo",
+                        fontWeight = FontWeight.Bold,
+                        color = AquaPrimary
+                    )
+                }
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Generador de foto con Random User
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(AquaPrimary.copy(alpha = 0.06f))
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(
+                            model = uiState.nuevaFotoUrl.ifBlank { "https://randomuser.me/api/portraits/men/1.jpg" },
+                            contentDescription = "Foto de perfil",
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape)
+                                .background(AquaPrimary.copy(alpha = 0.15f)),
+                            contentScale = ContentScale.Crop
+                        )
+
+                        Spacer(Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Foto de Perfil (Random User)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AquaTextSecondary
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedButton(
+                                onClick = { viewModel.generarFotoAleatoria() },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                enabled = !uiState.cargandoFoto
+                            ) {
+                                if (uiState.cargandoFoto) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp,
+                                        color = AquaPrimary
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Cargando...", fontSize = 11.sp)
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Generar otra foto", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = uiState.nuevoNombre,
+                        onValueChange = { viewModel.onNuevoNombreChange(it) },
+                        label = { Text("Nombre y Apellidos *") },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    var rutFieldValue by remember(uiState.showAddDialog, uiState.buzoAEditar) {
+                        mutableStateOf(
+                            TextFieldValue(
+                                text = uiState.nuevoRut,
+                                selection = TextRange(uiState.nuevoRut.length)
+                            )
+                        )
+                    }
+                    LaunchedEffect(uiState.nuevoRut) {
+                        if (rutFieldValue.text != uiState.nuevoRut) {
+                            rutFieldValue = TextFieldValue(
+                                text = uiState.nuevoRut,
+                                selection = TextRange(uiState.nuevoRut.length)
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = rutFieldValue,
+                        onValueChange = { newValue ->
+                            // Si el usuario borra el guion con backspace, eliminamos el último carácter real del RUT
+                            val textoEntrada = if (
+                                rutFieldValue.text.contains('-') &&
+                                !newValue.text.contains('-') &&
+                                newValue.text.length == rutFieldValue.text.length - 1
+                            ) {
+                                uiState.nuevoRut.filter { it.isDigit() || it.equals('k', ignoreCase = true) }.dropLast(1)
+                            } else {
+                                newValue.text
+                            }
+                            viewModel.onNuevoRutChange(textoEntrada)
+                            val formateado = com.example.myapplication.util.Rutificador.formatearEnVivo(textoEntrada)
+                            rutFieldValue = TextFieldValue(
+                                text = formateado,
+                                selection = TextRange(formateado.length)
+                            )
+                        },
+                        label = { Text("RUT (ej: 18.234.567-8) *") },
+                        leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Peso, estatura y talla en ruedas selectoras
+                    val opcionesPeso = remember { (45..140).map { it.toString() } }
+                    val opcionesEstatura = remember {
+                        (145..210).map { String.format(Locale.US, "%.2f", it / 100.0) }
+                    }
+                    val opcionesTallaRopa = remember { (36..48).map { it.toString() } }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            RuedaSelectorCard(
+                                titulo = "Peso Corporal",
+                                unidad = "kg",
+                                icono = Icons.Default.MonitorWeight,
+                                opciones = opcionesPeso,
+                                valorSeleccionado = uiState.nuevoPeso?.toInt()?.toString() ?: "78",
+                                onValorChange = { viewModel.onPesoChange(it) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            RuedaSelectorCard(
+                                titulo = "Estatura",
+                                unidad = "m",
+                                icono = Icons.Default.Height,
+                                opciones = opcionesEstatura,
+                                valorSeleccionado = uiState.nuevaEstatura?.let { String.format(Locale.US, "%.2f", it) } ?: "1.75",
+                                onValorChange = { viewModel.onEstaturaChange(it) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        RuedaSelectorCard(
+                            titulo = "Talla",
+                            unidad = "",
+                            icono = Icons.Default.Person,
+                            opciones = opcionesTallaRopa,
+                            valorSeleccionado = uiState.nuevaTalla?.toInt()?.toString() ?: "42",
+                            onValorChange = { viewModel.onTallaChange(it) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // Alergias
+                    OutlinedTextField(
+                        value = uiState.nuevasAlergias,
+                        onValueChange = { viewModel.onNuevasAlergiasChange(it) },
+                        label = { Text("Alergias") },
+                        placeholder = { Text("ej: Penicilina, ninguna") },
+                        leadingIcon = { Icon(Icons.Default.MedicalServices, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Certificado de evaluación laboral de salud ACHS (PDF)
+                    Surface(
+                        color = AquaBackground,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureAsPdf,
+                                    contentDescription = null,
+                                    tint = if (uiState.nuevoCertificadoAchsUri != null) SafetySuccess else AquaPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Certificado Evaluación Laboral ACHS (PDF)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AquaTextPrimary
+                                )
+                            }
+                            Text(
+                                text = uiState.nuevoCertificadoAchsUri?.substringAfterLast('/')
+                                    ?: "Ningún archivo PDF adjuntado",
+                                fontSize = 11.sp,
+                                color = if (uiState.nuevoCertificadoAchsUri != null) SafetySuccess else AquaTextSecondary
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Seleccionar PDF", fontSize = 11.sp)
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        val nombreArchivo = "Certificado_ACHS_${uiState.nuevoNombre.trim().replace(' ', '_').ifBlank { "Buzo" }}.pdf"
+                                        viewModel.onCertificadoAchsChange(nombreArchivo)
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Verified, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("PDF Demo", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    // Fecha de nacimiento
+                    OutlinedTextField(
+                        value = uiState.nuevaEdad?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Fecha de nacimiento") },
+                        placeholder = { Text("dd/MM/aaaa") },
+                        leadingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
+                        trailingIcon = {
+                            IconButton(onClick = { mostrarDatePicker = true }) {
+                                Icon(Icons.Default.EditCalendar, contentDescription = "Seleccionar fecha")
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (mostrarDatePicker) {
+                        val datePickerState = rememberDatePickerState(
+                            selectableDates = object : SelectableDates {
+                                override fun isSelectableDate(utcTimeMillis: Long) =
+                                    utcTimeMillis <= System.currentTimeMillis()
+                            }
+                        )
+                        DatePickerDialog(
+                            onDismissRequest = { mostrarDatePicker = false },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        datePickerState.selectedDateMillis?.let { millis ->
+                                            val fecha = Instant.ofEpochMilli(millis)
+                                                .atZone(ZoneOffset.UTC)
+                                                .toLocalDate()
+                                            viewModel.onNuevaEdadChange(fecha)
+                                        }
+                                        mostrarDatePicker = false
+                                    },
+                                    enabled = datePickerState.selectedDateMillis != null
+                                ) { Text("Aceptar") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { mostrarDatePicker = false }) { Text("Cancelar") }
+                            }
+                        ) {
+                            DatePicker(state = datePickerState)
+                        }
+                    }
+
+                    // Selector de Categoría DIRECTEMAR
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { categoriaDropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Categoría: ${uiState.nuevaCategoria}", fontSize = 13.sp, color = AquaTextPrimary)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = categoriaDropdownExpanded,
+                            onDismissRequest = { categoriaDropdownExpanded = false }
+                        ) {
+                            viewModel.categoriasDisponibles.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat) },
+                                    onClick = {
+                                        viewModel.onNuevaCategoriaChange(cat)
+                                        categoriaDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = uiState.nuevaMatricula,
+                        onValueChange = { viewModel.onNuevaMatriculaChange(it) },
+                        label = { Text("Matrícula Marítima DIRECTEMAR") },
+                        placeholder = { Text("ej: Matrícula N° 2394") },
+                        leadingIcon = { Icon(Icons.Default.DirectionsBoat, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = uiState.nuevoPuntajeCalbuco,
+                        onValueChange = { viewModel.onNuevoPuntajeCalbucoChange(it) },
+                        label = { Text("Escuela de Buceo Calbuco (%)") },
+                        placeholder = { Text("ej: 90") },
+                        leadingIcon = { Icon(Icons.Default.School, contentDescription = null, tint = AquaPrimary) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = {
+                            val pts = uiState.nuevoPuntajeCalbuco.toIntOrNull() ?: 0
+                            if (pts < 70) {
+                                Text("< 70%: Semáforo Amarillo / Requiere supervisión", color = Color(0xFFB45309))
+                            } else {
+                                Text("Puntaje 0-100 (Mínimo recomendado: 70%)")
+                            }
+                        }
+                    )
+
+                    // Selector de País para formato automático de teléfono
+                    Text(
+                        text = "País de teléfono (formato automático):",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AquaTextSecondary
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        PaisTelefono.entries.forEach { pais ->
+                            FilterChip(
+                                selected = uiState.paisTelefono == pais,
+                                onClick = { viewModel.onPaisTelefonoChange(pais) },
+                                label = { Text(pais.etiqueta, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    var telefonoFieldValue by remember(uiState.showAddDialog, uiState.buzoAEditar, uiState.paisTelefono) {
+                        mutableStateOf(
+                            TextFieldValue(
+                                text = uiState.nuevoTelefono,
+                                selection = TextRange(uiState.nuevoTelefono.length)
+                            )
+                        )
+                    }
+                    LaunchedEffect(uiState.nuevoTelefono) {
+                        if (telefonoFieldValue.text != uiState.nuevoTelefono) {
+                            telefonoFieldValue = TextFieldValue(
+                                text = uiState.nuevoTelefono,
+                                selection = TextRange(uiState.nuevoTelefono.length)
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = telefonoFieldValue,
+                        onValueChange = { newValue ->
+                            val digitosPrevios = uiState.paisTelefono.extraerDigitosLocales(telefonoFieldValue.text)
+                            val digitosNuevos = uiState.paisTelefono.extraerDigitosLocales(newValue.text)
+                            // Si el usuario presionó borrar sobre un espacio del formato, borramos el último dígito
+                            val entradaFinal = if (
+                                newValue.text.length < telefonoFieldValue.text.length &&
+                                digitosNuevos == digitosPrevios &&
+                                digitosPrevios.isNotEmpty()
+                            ) {
+                                digitosPrevios.dropLast(1)
+                            } else {
+                                newValue.text
+                            }
+                            viewModel.onNuevoTelefonoChange(entradaFinal)
+                            val formateado = uiState.paisTelefono.formatearNumero(entradaFinal)
+                            telefonoFieldValue = TextFieldValue(
+                                text = formateado,
+                                selection = TextRange(formateado.length)
+                            )
+                        },
+                        label = { Text("Teléfono de Contacto (${uiState.paisTelefono.prefijo})") },
+                        placeholder = { Text("${uiState.paisTelefono.prefijo} 9 8451 2290") },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Selector de Empresa con botón + para Nueva Empresa Contratista
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutlinedButton(
+                                onClick = { empresaDropdownExpanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Empresa: ${uiState.empresaSeleccionada.take(20)}${if (uiState.empresaSeleccionada.length > 20) "..." else ""}",
+                                        fontSize = 13.sp,
+                                        color = AquaTextPrimary
+                                    )
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = empresaDropdownExpanded,
+                                onDismissRequest = { empresaDropdownExpanded = false }
+                            ) {
+                                uiState.empresasDisponibles.forEach { emp ->
+                                    DropdownMenuItem(
+                                        text = { Text(emp) },
+                                        onClick = {
+                                            viewModel.onEmpresaSeleccionadaChange(emp)
+                                            empresaDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { viewModel.openNuevaEmpresaDialog() },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(AquaSecondary.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Nueva Empresa", tint = AquaPrimary)
+                        }
+                    }
+
+                    // Selector de Vigencia de Matrícula
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { vigenciaDropdownExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Vigencia Matrícula: ${uiState.nuevaVigencia}", fontSize = 13.sp, color = AquaTextPrimary)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = vigenciaDropdownExpanded,
+                            onDismissRequest = { vigenciaDropdownExpanded = false }
+                        ) {
+                            viewModel.vigenciasDisponibles.forEach { vig ->
+                                DropdownMenuItem(
+                                    text = { Text(vig) },
+                                    onClick = {
+                                        viewModel.onNuevaVigenciaChange(vig)
+                                        vigenciaDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    if (uiState.error != null) {
+                        Text(
+                            text = uiState.error ?: "",
+                            color = SafetyDanger,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.guardarBuzo() },
+                    colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
+                ) {
+                    Text(if (esModoEdicion) "Actualizar Buzo" else "Guardar Buzo")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.closeAddDialog() }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (uiState.showNuevaEmpresaDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.closeNuevaEmpresaDialog() },
+            title = { Text("Nueva Empresa Contratista", fontWeight = FontWeight.Bold, color = AquaPrimary) },
+            text = {
+                Column {
+                    Text("Ingresa el nombre de la empresa de buceo para añadirla a los registros:", fontSize = 13.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = uiState.nuevaEmpresaNombre,
+                        onValueChange = { viewModel.onNuevaEmpresaNombreChange(it) },
+                        label = { Text("Nombre de la empresa *") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.guardarNuevaEmpresa() },
+                    colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
+                ) {
+                    Text("Añadir Empresa")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.closeNuevaEmpresaDialog() }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+}
+
 @Composable
 fun FichaItem(label: String, valor: String) {
     Row(
@@ -729,7 +1020,8 @@ fun BuzoCard(
     buzo: Buzo,
     onClick: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onToggleAlertaNoInvasiva: () -> Unit = {}
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -852,16 +1144,109 @@ fun BuzoCard(
                     )
                 }
                 Surface(
-                    color = if (buzo.vigenciaMatricula.contains("Expirada", ignoreCase = true)) SafetyCardBgDanger else Color(0xFFF1F5F9),
+                    color = if (buzo.matriculaVencida) SafetyCardBgDanger else Color(0xFFF1F5F9),
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
-                        text = "Vigencia: ${buzo.vigenciaMatricula}",
+                        text = if (buzo.matriculaVencida) "Matrícula Vencida" else "Vigencia: ${buzo.vigenciaMatricula}",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (buzo.vigenciaMatricula.contains("Expirada", ignoreCase = true)) SafetyDanger else AquaTextSecondary,
+                        color = if (buzo.matriculaVencida) SafetyDanger else AquaTextSecondary,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
+                }
+                if (buzo.matriculaAdvertencia60a15Dias && buzo.alertaMatriculaNoInvasiva) {
+                    Surface(
+                        color = Color(0xFFFEF3C7),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "Por vencer (${buzo.diasRestantesMatricula}d)",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFB45309),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                if (buzo.certificadoAchsUri != null) {
+                    Surface(
+                        color = SafetyCardBgSuccess,
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = SafetySuccess, modifier = Modifier.size(11.dp))
+                            Spacer(Modifier.width(3.dp))
+                            Text("PDF ACHS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SafetySuccess)
+                        }
+                    }
+                }
+            }
+
+            // Advertencia invasiva de matrícula cuando quedan entre 60 y 15 días (puede pasarse a no invasiva)
+            if (buzo.matriculaAdvertencia60a15Dias && !buzo.alertaMatriculaNoInvasiva) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = Color(0xFFFEF3C7),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WarningAmber,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Matrícula vence en ${buzo.diasRestantesMatricula} días (rango 60-15 días)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB45309)
+                            )
+                        }
+                        TextButton(
+                            onClick = onToggleAlertaNoInvasiva,
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Text("No invasiva", fontSize = 10.sp, color = Color(0xFFB45309), fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                }
+            } else if (buzo.matriculaVencida) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = SafetyCardBgDanger,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = SafetyDanger, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Matrícula vencida: se mostrará advertencia bajo su nombre en faenas.",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SafetyDanger
+                        )
+                    }
                 }
             }
 

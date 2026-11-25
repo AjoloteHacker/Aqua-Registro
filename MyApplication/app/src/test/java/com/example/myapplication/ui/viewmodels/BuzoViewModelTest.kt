@@ -2,16 +2,30 @@ package com.example.myapplication.ui.viewmodels
 
 import com.example.myapplication.data.model.Buzo
 import com.example.myapplication.data.model.EstadoSalud
+import com.example.myapplication.data.repository.AquaRepository
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class BuzoViewModelTest {
 
+    private val testDispatcher = UnconfinedTestDispatcher()
     private lateinit var listaBuzos: List<Buzo>
 
     @Before
     fun setUp() {
+        Dispatchers.setMain(testDispatcher)
         listaBuzos = listOf(
             Buzo(
                 id = "1",
@@ -87,9 +101,37 @@ class BuzoViewModelTest {
         assertEquals("Pedro Almonacid Vera", state.buzosFiltrados.first().nombre)
     }
 
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun buzosFiltrados_conBusquedaYSinCoincidencias_retornaListaVacia() {
         val state = BuzoUiState(buzos = listaBuzos, searchQuery = "Inexistente 999")
         assertTrue(state.buzosFiltrados.isEmpty())
+    }
+
+    @Test
+    fun buzoViewModel_conMockK_guardarBuzoValidoInvocaRepositorio() {
+        val repositoryMock = mockk<AquaRepository>(relaxed = true)
+        every { repositoryMock.buzos } returns MutableStateFlow(listaBuzos)
+        every { repositoryMock.empresasFlow } returns MutableStateFlow(listOf("AquaSub Chile Limitada"))
+        every { repositoryMock.empresas } returns listOf("AquaSub Chile Limitada")
+        every { repositoryMock.agregarBuzo(any()) } answers {
+            Result.success(firstArg())
+        }
+
+        val viewModel = BuzoViewModel(repository = repositoryMock)
+        viewModel.openAddDialog()
+        viewModel.onNuevoNombreChange("Juan Pérez Soto")
+        viewModel.onNuevoRutChange("12.345.678-5")
+        viewModel.onNuevoTelefonoChange("+56 9 8765 4321")
+        viewModel.guardarBuzo()
+
+        verify(exactly = 1) {
+            repositoryMock.agregarBuzo(match { it.nombre == "Juan Pérez Soto" && it.rut == "12.345.678-5" })
+        }
+        assertFalse(viewModel.uiState.value.showAddDialog)
     }
 }

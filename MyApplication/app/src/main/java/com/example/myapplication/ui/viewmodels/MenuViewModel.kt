@@ -20,9 +20,25 @@ class MenuViewModel(
     val isNetworkConnected: StateFlow<Boolean> = repository.isNetworkConnected
     val climaMaritimo: StateFlow<String> = repository.climaMaritimo
     val syncStatus: StateFlow<String> = repository.syncStatus
+    val pendientesSincronizarIds: StateFlow<Set<String>> = repository.pendientesSincronizarIds
+    val serverUrl: StateFlow<String> = repository.serverUrl
+    val servidorOnline: StateFlow<Boolean> = repository.servidorOnline
+    val ultimoPingDetalle: StateFlow<String> = repository.ultimoPingDetalle
 
     fun sincronizarAhora() {
         repository.sincronizarAhora()
+    }
+
+    fun alternarModoOfflineDemo() {
+        repository.alternarModoOfflineDemo()
+    }
+
+    fun cambiarUrlServidor(nuevaUrl: String) {
+        repository.cambiarUrlServidor(nuevaUrl)
+    }
+
+    fun probarConexionServidor() {
+        repository.probarConexionServidor()
     }
 
     fun actualizarClima(centro: String) {

@@ -181,6 +181,7 @@ fun ChecklistEquiposContent(
             .padding(16.dp)
     ) {
         // Etapa
+        @Suppress("DEPRECATION")
         TabRow(selectedTabIndex = uiState.etapa.ordinal) {
             EtapaComprobacion.values().forEach { etapa ->
                 Tab(
@@ -446,26 +447,55 @@ private fun EvidenciaFotosSection(
 
 @Composable
 private fun ResumenCard(uiState: EquiposUiState) {
-    val hayCritico = uiState.inutilizables > 0
+    val hayCritico = uiState.inutilizables > 0 || uiState.equipos.any { !it.coincideConLineaBase }
+    val hayAdvertencia = !hayCritico && (uiState.riesgosos > 0 || !uiState.todoCompleto)
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (hayCritico) SafetyCardBgDanger else Color.White
+            containerColor = when {
+                hayCritico -> SafetyCardBgDanger
+                hayAdvertencia -> Color(0xFFFEF3C7)
+                else -> SafetyCardBgSuccess
+            }
         )
     ) {
         Column(Modifier.padding(12.dp)) {
-            if (hayCritico) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Warning, null, tint = SafetyDanger, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "${uiState.inutilizables} equipo(s) inutilizable(s)",
-                        fontWeight = FontWeight.Bold, fontSize = 13.sp, color = SafetyDanger
-                    )
-                }
-                Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = when {
+                        hayCritico -> Icons.Default.Block
+                        hayAdvertencia -> Icons.Default.WarningAmber
+                        else -> Icons.Default.VerifiedUser
+                    },
+                    contentDescription = null,
+                    tint = when {
+                        hayCritico -> SafetyDanger
+                        hayAdvertencia -> Color(0xFFB45309)
+                        else -> SafetySuccess
+                    },
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = when {
+                        hayCritico ->
+                            "SEMÁFORO ROJO · BLOQUEO DE ZARPE (${uiState.inutilizables} equipo(s) en «No cumple» / Inutilizable)"
+                        hayAdvertencia ->
+                            "SEMÁFORO AMARILLO · Auditoría de equipos en progreso (${uiState.completos}/${uiState.equipos.size})"
+                        else ->
+                            "SEMÁFORO VERDE · Todos los equipos y evidencias conformes"
+                    },
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = when {
+                        hayCritico -> SafetyDanger
+                        hayAdvertencia -> Color(0xFFB45309)
+                        else -> SafetySuccess
+                    }
+                )
             }
+            Spacer(Modifier.height(6.dp))
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween

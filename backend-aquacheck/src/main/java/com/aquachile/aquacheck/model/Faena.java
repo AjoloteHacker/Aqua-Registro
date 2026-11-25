@@ -17,6 +17,9 @@ public class Faena {
     @NotBlank
     private String buzoNombre;
 
+    private String socorristaId = "";
+    private String socorristaNombre = "";
+
     private String empresa;
     private String centroCultivo;
     private String tipoFaena;
@@ -35,9 +38,19 @@ public class Faena {
     public Faena(String id, String buzoId, String buzoNombre, String empresa, String centroCultivo,
                  String tipoFaena, Integer profundidadMetros, Integer tiempoMinutos, String fechaHora,
                  String estado, String autorizadoPor, String aprobadoPor, String fechaAprobacion) {
+        this(id, buzoId, buzoNombre, "", "", empresa, centroCultivo, tipoFaena,
+                profundidadMetros, tiempoMinutos, fechaHora, estado, autorizadoPor, aprobadoPor, fechaAprobacion);
+    }
+
+    public Faena(String id, String buzoId, String buzoNombre, String socorristaId, String socorristaNombre,
+                 String empresa, String centroCultivo, String tipoFaena, Integer profundidadMetros,
+                 Integer tiempoMinutos, String fechaHora, String estado, String autorizadoPor,
+                 String aprobadoPor, String fechaAprobacion) {
         this.id = id;
         this.buzoId = buzoId;
         this.buzoNombre = buzoNombre;
+        this.socorristaId = socorristaId != null ? socorristaId : "";
+        this.socorristaNombre = socorristaNombre != null ? socorristaNombre : "";
         this.empresa = empresa;
         this.centroCultivo = centroCultivo;
         this.tipoFaena = tipoFaena;
@@ -58,6 +71,12 @@ public class Faena {
 
     public String getBuzoNombre() { return buzoNombre; }
     public void setBuzoNombre(String buzoNombre) { this.buzoNombre = buzoNombre; }
+
+    public String getSocorristaId() { return socorristaId; }
+    public void setSocorristaId(String socorristaId) { this.socorristaId = socorristaId != null ? socorristaId : ""; }
+
+    public String getSocorristaNombre() { return socorristaNombre; }
+    public void setSocorristaNombre(String socorristaNombre) { this.socorristaNombre = socorristaNombre != null ? socorristaNombre : ""; }
 
     public String getEmpresa() { return empresa; }
     public void setEmpresa(String empresa) { this.empresa = empresa; }

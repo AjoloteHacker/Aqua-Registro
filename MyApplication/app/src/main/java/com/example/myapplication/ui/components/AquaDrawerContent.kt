@@ -72,13 +72,6 @@ fun AquaDrawerContent(
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Image(
-                            painter = painterResource(id = R.drawable.logo_aquachile_white),
-                            contentDescription = "Logo AquaChile",
-                            modifier = Modifier.height(15.dp),
-                            contentScale = ContentScale.Fit
-                        )
                     }
                 }
 
@@ -103,7 +96,7 @@ fun AquaDrawerContent(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "SEREMI: ${usuario?.registroSeremi ?: "S/R"} · ${usuario?.centro ?: "Base AquaChile"}",
+                            text = "${usuario?.rol?.etiqueta ?: "Supervisor"} · SEREMI: ${usuario?.registroSeremi ?: "S/R"}",
                             color = Color.White.copy(alpha = 0.9f),
                             fontSize = 11.sp,
                             lineHeight = 13.sp

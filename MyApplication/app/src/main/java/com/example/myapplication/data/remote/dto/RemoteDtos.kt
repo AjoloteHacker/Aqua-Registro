@@ -81,11 +81,24 @@ data class BitacoraInmersionDto(
     @SerializedName("observaciones") val observaciones: String? = null
 )
 
+data class EvidenciaFotograficaDto(
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("faenaId") val faenaId: String,
+    @SerializedName("tipoEquipo") val tipoEquipo: String, // "MALETA_AIRE", "FILTROS_COMPRESOR", "ALETAS", "CENSUS"
+    @SerializedName("fotoUrl") val fotoUrl: String?,
+    @SerializedName("fotoLineaBaseUrl") val fotoLineaBaseUrl: String?,
+    @SerializedName("fechaHora") val fechaHora: String? = null,
+    @SerializedName("responsable") val responsable: String?,
+    @SerializedName("coincideLineaBase") val coincideLineaBase: Boolean?,
+    @SerializedName("observaciones") val observaciones: String?
+)
+
 data class SyncBatchRequestDto(
     @SerializedName("dispositivoOrigenId") val dispositivoOrigenId: String,
     @SerializedName("buzos") val buzos: List<BuzoDto> = emptyList(),
     @SerializedName("faenas") val faenas: List<FaenaDto> = emptyList(),
-    @SerializedName("bitacoras") val bitacoras: List<BitacoraInmersionDto> = emptyList()
+    @SerializedName("bitacoras") val bitacoras: List<BitacoraInmersionDto> = emptyList(),
+    @SerializedName("evidencias") val evidencias: List<EvidenciaFotograficaDto> = emptyList()
 )
 
 data class SyncBatchResponseDto(

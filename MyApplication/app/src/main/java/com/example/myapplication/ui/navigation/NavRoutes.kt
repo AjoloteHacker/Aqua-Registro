@@ -24,6 +24,7 @@ sealed class Screen(
     object Empresas : Screen("empresas", "Empresas Contratistas", Icons.Default.Business)
 
     companion object {
-        val drawerScreens = listOf(Menu, Buzo, Equipos, Salud, Trabajo, Historial, Empresas)
+        /** Todos los módulos disponibles en la barra lateral para agilizar la navegación de la app. */
+        val drawerScreens = listOf(Menu, Trabajo, Buzo, Equipos, Salud, Historial, Empresas)
     }
 }

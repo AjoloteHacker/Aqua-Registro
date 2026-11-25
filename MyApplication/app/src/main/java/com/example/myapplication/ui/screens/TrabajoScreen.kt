@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.myapplication.ui.components.AquaScaffold
+import com.example.myapplication.ui.components.RuedaSelectorCard
 import com.example.myapplication.ui.navigation.Screen
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.ui.viewmodels.TrabajoViewModel
@@ -121,6 +122,19 @@ fun TrabajoScreen(
                         }
                     }
 
+                    if (uiState.buzoSeleccionado?.matriculaVencida == true) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = SafetyDanger, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "Advertencia: ${uiState.buzoSeleccionado?.nombre} tiene la matrícula vencida.",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SafetyDanger
+                            )
+                        }
+                    }
+
                     Text("Buzo socorrista (secundario):", fontSize = 12.sp, color = AquaTextSecondary)
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(
@@ -155,6 +169,19 @@ fun TrabajoScreen(
                                     }
                                 )
                             }
+                        }
+                    }
+
+                    if (uiState.socorristaSeleccionado?.matriculaVencida == true) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = SafetyDanger, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "Advertencia: ${uiState.socorristaSeleccionado?.nombre} tiene la matrícula vencida.",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SafetyDanger
+                            )
                         }
                     }
 
@@ -280,25 +307,30 @@ fun TrabajoScreen(
                         }
                     }
 
+                    val opcionesProfundidad = remember { (5..60).map { it.toString() } }
+                    val opcionesTiempoMin = remember { (10..90).map { it.toString() } }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        OutlinedTextField(
-                            value = uiState.profundidad,
-                            onValueChange = { viewModel.onProfundidadChange(it) },
-                            label = { Text("Profundidad (m)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
+                        RuedaSelectorCard(
+                            titulo = "Profundidad",
+                            unidad = "m",
+                            icono = Icons.Default.Water,
+                            opciones = opcionesProfundidad,
+                            valorSeleccionado = uiState.profundidad.ifBlank { "18" },
+                            onValorChange = { viewModel.onProfundidadChange(it) },
+                            modifier = Modifier.weight(1f)
                         )
-                        OutlinedTextField(
-                            value = uiState.duracionMinutos,
-                            onValueChange = { viewModel.onDuracionChange(it) },
-                            label = { Text("Tiempo máx (min)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
+                        RuedaSelectorCard(
+                            titulo = "Tiempo máx.",
+                            unidad = "min",
+                            icono = Icons.Default.Timer,
+                            opciones = opcionesTiempoMin,
+                            valorSeleccionado = uiState.duracionMinutos.ifBlank { "40" },
+                            onValorChange = { viewModel.onDuracionChange(it) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
 

@@ -1,4 +1,4 @@
-# 🌊 Aqua-Registro (MVP)
+# Aqua-Registro (MVP)
 > **Proyecto de Vinculación con el Medio (VcM) — DSY1105 Desarrollo de Aplicaciones Móviles**  
 > **Equipo:** Smiling Friends | **Sección:** 002D  
 
@@ -19,30 +19,29 @@
 
 ##  Funcionalidades Principales del MVP
 
-1. **Autenticación y Registro de Prevencionistas:**
-   * Validación estricta de formato y dígito verificador del RUT chileno (Módulo 11).
-   * Verificación de credencial SEREMI y centro de cultivo base asignado.
-2. **Enrolamiento y Gestión de Buzos (CRUD Completo):**
-   * Registro con nombre, RUT, matrícula marítima DIRECTEMAR, empresa contratista y teléfono.
-   * Modificación de datos y eliminación protegida (no permite borrar buzos con faenas activas).
+1. **Autenticación, Control por Roles y Registro de Prevencionistas:**
+   * Validación estricta de formato y dígito verificador del RUT chileno (Módulo 11) con auto-formato en vivo.
+   * Verificación de credencial SEREMI, centro de cultivo base asignado y control de permisos por rol (`SUPERVISOR` con facultad de aprobación/cierre vs. `OPERADOR` con permisos restringidos).
+2. **Enrolamiento, Ficha de Salud y Gestión de Buzos (CRUD Completo):**
+   * Registro con nombre, RUT auto-formateado, matrícula marítima DIRECTEMAR, empresa contratista y teléfono con formato automático por país (`Chile +56`, `Argentina +54`, `Perú +51`).
+   * **Ficha Médica en Perfil del Buzo:** Selección de Peso Corporal (kg), Estatura (m) y Talla de traje mediante **ruedas selectoras (*Wheel Picker*)**, cálculo automático de IMC, registro de alergias, fecha de nacimiento (edad) y carga de **Certificado ACHS en PDF**.
+   * **Sistema de Alertas de Vigencia de Matrícula:** Pop-up crítico al iniciar sesión ($<15$ días o vencida), alerta invasiva conmutable a no invasiva ($60$ a $15$ días) y advertencia visual bajo el nombre del buzo en faenas.
+   * Modificación de datos y eliminación protegida (no permite borrar buzos ejecutores ni socorristas con faenas en curso).
    * Generación y selección de foto de perfil de trabajadores mediante API **RandomUser** (`RandomUserGenerator`) y carga asíncrona con **Coil**.
-3. **Auditoría Técnica de Equipos de Buceo:**
-   * Checklist interactivo de los 9 implementos técnicos obligatorios según normativa marítima.
-   * Evidencias por etapas: *Pre-equipación* y *Equipado*.
-   * **Integración con Cámara Nativa:** Captura de evidencia fotográfica del estado del equipo almacenada mediante `FileProvider`.
-4. **Encuesta Biomédica de Salud Pre y Post Buceo:**
-   * Evaluación de presión arterial sistólica/diastólica, frecuencia cardíaca y signos vitales.
-   * **Selector de Rueda (*Wheel Picker*) sin teclado:** Selección ergonómica de Peso Corporal (kg) y Estatura/Talla (m) con cálculo automático de IMC, además de perfil lipídico y laboratorio.
-   * Declaración jurada de condiciones físicas (descanso, sin congestión, sin medicamentos).
-   * Dictamen algorítmico reactivo de aptitud médica: `APTO` o `NO_APTO` y registro en el **Historial Médico**.
-5. **Planificación AST y Autorización de Faenas:**
-   * Registro de profundidad máxima de inmersión, tiempo de fondo, centro operativo y **prevencionista que autorizó la faena** (con credencial SEREMI).
-   * Control de requisitos previos antes del cierre formal de la inmersión.
-6. **Bitácora e Historial Digital (Faenas e Historial Médico):**
-   * Vista en dos pestañas: **Bitácora de Faenas** e **Historial Médico** de evaluaciones biomédicas.
-   * Lista reactiva con buscador en tiempo real por folio, buzo, RUT, evaluador/supervisor o centro.
-   * Filtros dinámicos por estado (*Todas*, *En Curso*, *Completada* / *Aptos*, *No Aptos*).
-   * Ficha de detalle, registro de quién autorizó y aprobó la faena, y cierre formal de inmersiones.
+3. **Auditoría Técnica de Equipos de Buceo y Contraste con Línea Base:**
+   * Checklist interactivo de los 9 implementos técnicos obligatorios por cada uno de los **2 buzos de la tripulación** (Ejecutor y Socorrista), compartiendo el estado individual entre las etapas *Pre-equipación* y *Equipado*.
+   * **Evidencia Fotográfica Global por Etapa con Cámara Nativa (`FileProvider`):** 1 foto general en *Pre-equipación*, y 2 fotos (*Frente* y *Atrás*) en *Equipado*.
+   * **Contraste con Línea Base (4 Equipos Críticos):** Comparación visual e inspección individual para *Maleta de suministro de aire*, *Filtros de compresor*, *Aletas* y *Dispositivo Census*.
+4. **Encuesta Biomédica de Salud y Motor de Semáforo Industrial:**
+   * Evaluación independiente por faena (momentos *Antes* y *Después* de la inmersión, sin exigir la encuesta post-inmersión para cerrar).
+   * Evaluación de presión arterial sistólica/diastólica, pulso mediante **rueda selectora (*Wheel Picker*)**, perfil lipídico/laboratorio y cuestionario de declaración de salud.
+   * **Semáforo Industrial Reactivo (`VERDE`, `AMARILLO`, `ROJO`):** Bloqueo estricto en **Rojo** si el buzo tiene $>45$ años sin test de esfuerzo vigente, o si el compresor principal / buzo de emergencia / equipo crítico está en «No cumple».
+5. **Planificación AST y Autorización de Faenas (Tripulación de 2 Buzos):**
+   * Asignación obligatoria de **Buzo Ejecutor** y **Buzo Socorrista** distintos, selección de profundidad y tiempo máximo mediante **ruedas selectoras**, y asignación automática del **Supervisor implícito** según la sesión activa.
+6. **Bitácora Digital, Alertas 24/9 m/min y Cierre Anticipado (Faenas sin Terminar):**
+   * Vista en dos pestañas: **Bitácora de Faenas** e **Historial Médico** con buscador y filtros dinámicos (*Todas*, *En Curso*, *Completada*, *Sin Terminar* / *Aptos*, *No Aptos*).
+   * **Bitácora Post-Inmersión (Regla 24/9 m/min):** Alerta crítica automática al Jefe de Centro ante velocidades de descenso $>24\text{ m/min}$ o ascenso $>9\text{ m/min}$.
+   * **Cierre de Faenas sin Terminar:** Formulario de selección múltiple con marcado automático de *Equipo en mal estado* y *Buzos enfermos*, ingreso de múltiples causas en *«Otro»* y comentario editable incluso después del cierre.
 7. **Gestión de Empresas Contratistas:**
    * Catálogo extensible y persistente de empresas prestadoras de servicios de buceo comercial.
 
@@ -174,7 +173,7 @@ stateDiagram-v2
 El avance de tareas, historias de usuario, asignación de responsabilidades y trazabilidad de pendientes se gestiona mediante **Trello** y **Pull Requests en GitHub**:
 * **Repositorio y Pull Requests del Equipo:** [GitHub — AjoloteHacker/Aqua-Registro](https://github.com/AjoloteHacker/Aqua-Registro/pulls?q=is%3Apr)
 * **Tablero Trello del Proyecto:** [Aqua-Registro — Sprint Planning & Tareas](https://trello.com/b/aqua-registro-smiling-friends)
-* **Columnas de Seguimiento:** `Backlog / Historias de Usuario` ➔ `En Progreso (Sprint Activo)` ➔ `En Revisión / QA` ➔ `Completado (Done / Entregable)`.
+* **Columnas de Seguimiento:** `Backlog / Historias de Usuario` -> `En Progreso (Sprint Activo)` -> `En Revisión / QA` -> `Completado (Done / Entregable)`.
 
 ---
 
@@ -205,14 +204,16 @@ El avance de tareas, historias de usuario, asignación de responsabilidades y tr
      cd MyApplication
      ./gradlew assembleRelease
      ```
-   * **Desde Android Studio:** Menú `Build` ➔ `Generate Signed Bundle / APK...` ➔ Seleccionar `APK` ➔ Cargar `release.jks` con alias `aquacheck` ➔ Seleccionar variante `release` y firmas V1/V2.
+   * **Desde Android Studio:** Menú `Build` -> `Generate Signed Bundle / APK...` -> Seleccionar `APK` -> Cargar `release.jks` con alias `aquacheck` -> Seleccionar variante `release` y firmas V1/V2.
    * **Ubicación del APK Release:** `MyApplication/app/build/outputs/apk/release/app-release.apk`.
    * **Seguridad de Firma:** La configuración de firma se realiza de forma segura en `build.gradle.kts` a través de `signingConfigs` leyendo `keystore.properties` (o variables de entorno). Los archivos `*.jks` y `keystore.properties` están protegidos e ignorados en `.gitignore` para cumplir con las normas de confidencialidad de la evaluación.
 
 ---
 
 ##  Credenciales de Prueba para Evaluación
-* **RUT Prevencionista:** `12.345.678-5`
-* **Contraseña:** `admin123`
-* **Credenciales de Keystore:** Alias: `aquacheck` | Password: `AquaCheck2026!` *(Ver `keystore.properties.example`)*
-*(También es posible registrar un nuevo prevencionista en la pestaña "Nuevo Registro" con cualquier RUT chileno válido).*
+* **Perfil 1 — Rol Supervisor (Aprobación y cierre de faenas habilitados):**
+  * **RUT:** `12.345.678-5` | **Contraseña:** `admin123`
+* **Perfil 2 — Rol Operador (Permisos restringidos: no puede aprobar ni cerrar faenas):**
+  * **RUT:** `18.765.432-K` | **Contraseña:** `operador123`
+* **Credenciales de Keystore:** Alias: `aquacheck` | Password: `AquaCheck2026!` *(Ver [`keystore.properties.example`](MyApplication/keystore.properties.example))*
+*(También es posible autocompletar cualquiera de los dos perfiles con un toque en la pantalla de Login o registrar un nuevo prevencionista en la pestaña "Registrar Usuario").*

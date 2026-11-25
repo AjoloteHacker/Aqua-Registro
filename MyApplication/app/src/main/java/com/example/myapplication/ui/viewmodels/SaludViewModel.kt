@@ -2,10 +2,13 @@ package com.example.myapplication.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.data.AppData
 import com.example.myapplication.data.Chequeo
+import com.example.myapplication.data.model.AsignacionBuzo
 import com.example.myapplication.data.model.Buzo
+import com.example.myapplication.data.model.ColorSemaforo
 import com.example.myapplication.data.model.EncuestaSalud
+import com.example.myapplication.data.model.EstadoEquipo
+import com.example.myapplication.data.model.EtapaComprobacion
 import com.example.myapplication.data.model.MomentoSalud
 import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.data.repository.AquaRepository
@@ -17,17 +20,29 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.util.Locale
 
 data class SaludUiState(
     val buzos: List<Buzo> = emptyList(),
     /** Faenas en curso: la encuesta se registra por faena y por momento (ANTES / DESPUÉS). */
     val faenas: List<RegistroFaena> = emptyList(),
     val faenaSeleccionadaId: String? = null,
+    /** Buzo de la tripulación seleccionado para validar en el semáforo (ejecutor o socorrista). */
+    val buzoEvaluadoId: String? = null,
     val momento: MomentoSalud = MomentoSalud.ANTES,
     /** Motivo por el que aún no se puede registrar la encuesta (null = habilitada). */
     val bloqueo: String? = null,
     /** Encuesta ya registrada para la faena y el momento seleccionados (si existe). */
     val encuestaRegistrada: EncuestaSalud? = null,
+
+    // Parámetros de validación cruzada del Semáforo Industrial (Anexo A EA4 / EA5)
+    val edadBuzo: String = "35",
+    val puntajeCalbuco: String = "90",
+    val examenPreocupacional: Boolean = true,
+    val compresorCumple: Boolean = true,
+    val buzoEmergenciaCumple: Boolean = true,
+    val equiposInutilizablesCount: Int = 0,
+    val equiposRiesgososCount: Int = 0,
 
     // Signos vitales
     val presionArterial: String = "120/80",
@@ -61,8 +76,32 @@ data class SaludUiState(
     val faenaSeleccionada: RegistroFaena?
         get() = faenas.firstOrNull { it.id == faenaSeleccionadaId }
 
+    val tripulacionFaena: List<AsignacionBuzo>
+        get() = faenaSeleccionada?.asignaciones().orEmpty()
+
     val buzoSeleccionado: Buzo?
-        get() = faenaSeleccionada?.let { faena -> buzos.firstOrNull { it.id == faena.buzoId } }
+        get() {
+            val targetId = buzoEvaluadoId?.takeIf { it.isNotBlank() } ?: faenaSeleccionada?.buzoId
+            return targetId?.let { id -> buzos.firstOrNull { it.id == id } }
+        }
+
+    // Validación cruzada de edad, IMC y Escuela de Calbuco (obtenidos del perfil del buzo)
+    val edadBuzoVal: Int?
+        get() = buzoSeleccionado?.edadAnios ?: edadBuzo.trim().toIntOrNull()?.takeIf { it in 18..85 }
+
+    val puntajeCalbucoVal: Int?
+        get() = buzoSeleccionado?.puntajeCalbuco ?: puntajeCalbuco.trim().toIntOrNull()?.takeIf { it in 0..100 }
+
+    val imcBuzo: Double?
+        get() = buzoSeleccionado?.imc
+
+    /** Regla Crítica 1 (Anexo A EA4/EA5): Buzo >45 años sin test de esfuerzo vigente -> Bloqueo Semáforo ROJO. */
+    val bloqueoMayor45SinTest: Boolean
+        get() = (edadBuzoVal ?: 0) > 45 && !testEsfuerzo
+
+    /** Regla Crítica 2 (Anexo A EA4/EA5): Compresor, buzo de emergencia o equipo en «No cumple» -> Bloqueo Semáforo ROJO. */
+    val bloqueoEquiposCriticos: Boolean
+        get() = !compresorCumple || !buzoEmergenciaCumple || equiposInutilizablesCount > 0
 
     // Rango médico
     val pulso: Int?
@@ -107,14 +146,68 @@ data class SaludUiState(
                 optometria && electrocardiograma && descansoAdecuado &&
                 sinSustancias && sinCongestion && condicionOptima
 
+    val motivosBloqueo: List<String>
+        get() = buildList {
+            if (bloqueoMayor45SinTest) {
+                add("BLOQUEO CRÍTICO: Buzo tiene ${edadBuzoVal} años (>45) y NO cuenta con Test de Esfuerzo vigente.")
+            }
+            if (!compresorCumple) {
+                add("BLOQUEO CRÍTICO: Compresor principal de suministro de aire en estado «No cumple».")
+            }
+            if (!buzoEmergenciaCumple) {
+                add("BLOQUEO CRÍTICO: Buzo de emergencia / socorrista en superficie en estado «No cumple».")
+            }
+            if (equiposInutilizablesCount > 0) {
+                add("BLOQUEO TÉCNICO: $equiposInutilizablesCount equipo(s) de la faena en estado Inutilizable («No cumple»).")
+            }
+            if (!examenPreocupacional) {
+                add("BLOQUEO MÉDICO: Examen médico preocupacional vencido o no vigente.")
+            }
+            if (!signosEnRango) {
+                add("BLOQUEO BIOMÉDICO: Presión arterial ($presionArterial) o pulso ($frecuenciaCardiaca lpm) fuera del rango normativo.")
+            }
+            if (!cuestionarioOk && !bloqueoMayor45SinTest) {
+                add("BLOQUEO FÍSICO: Factores de riesgo en cuestionario de declaración de salud.")
+            }
+        }
+
+    val advertenciasSemaforo: List<String>
+        get() = buildList {
+            val calbuco = puntajeCalbucoVal
+            if (calbuco != null && calbuco < 70) {
+                add("ADVERTENCIA OPERATIVA: Puntaje Escuela de Buceo de Calbuco ($calbuco/100 < 70) requiere supervisión.")
+            }
+            val imc = imcBuzo
+            if (imc != null && (imc < 19.0 || imc > 30.0)) {
+                add("ADVERTENCIA BIOMÉDICA: IMC del buzo (${String.format(Locale.US, "%.1f", imc)}) fuera de rango estándar (19.0 - 30.0).")
+            }
+            if (equiposRiesgososCount > 0) {
+                add("ADVERTENCIA TÉCNICA: $equiposRiesgososCount equipo(s) de la faena marcado(s) como Utilizable Riesgoso.")
+            }
+        }
+
     val esApto: Boolean
-        get() = cuestionarioOk && signosEnRango
+        get() = cuestionarioOk && signosEnRango && !bloqueoMayor45SinTest && examenPreocupacional && !bloqueoEquiposCriticos
+
+    val semaforo: ColorSemaforo
+        get() = when {
+            !esApto || motivosBloqueo.isNotEmpty() -> ColorSemaforo.ROJO
+            advertenciasSemaforo.isNotEmpty() -> ColorSemaforo.AMARILLO
+            else -> ColorSemaforo.VERDE
+        }
 
     val motivoNoApto: String
-        get() = if (!cuestionarioOk) {
-            "Existen factores de riesgo en el cuestionario físico. Se prohíbe el buceo hasta normalización."
-        } else {
-            "Revise presión arterial y pulso: están fuera del rango normativo seguro."
+        get() = when {
+            bloqueoMayor45SinTest ->
+                "BLOQUEO CRÍTICO: Buzo mayor de 45 años (${edadBuzoVal} años) sin Test de Esfuerzo vigente."
+            bloqueoEquiposCriticos ->
+                motivosBloqueo.firstOrNull() ?: "BLOQUEO CRÍTICO: Equipo crítico o buzo de emergencia en «No cumple»."
+            !examenPreocupacional ->
+                "BLOQUEO MÉDICO: El buzo no cuenta con Examen Preocupacional vigente."
+            !cuestionarioOk ->
+                "Existen factores de riesgo en el cuestionario físico. Se prohíbe el buceo hasta normalización."
+            else ->
+                "Revise presión arterial y pulso: están fuera del rango normativo seguro."
         }
 }
 
@@ -160,27 +253,34 @@ class SaludViewModel(
     }
 
     fun seleccionarFaena(faenaId: String) {
-        _uiState.update { it.copy(faenaSeleccionadaId = faenaId, userMessage = null) }
-        recalcular()
+        _uiState.update { it.copy(faenaSeleccionadaId = faenaId, buzoEvaluadoId = null, userMessage = null) }
+        recalcular(cargarDatosBuzo = true)
+    }
+
+    fun seleccionarBuzoEvaluado(buzoId: String) {
+        _uiState.update { it.copy(buzoEvaluadoId = buzoId, userMessage = null) }
+        recalcular(cargarDatosBuzo = true)
     }
 
     fun seleccionarMomento(momento: MomentoSalud) {
         _uiState.update { it.copy(momento = momento, userMessage = null) }
-        recalcular()
+        recalcular(cargarDatosBuzo = false)
     }
 
     private fun sincronizar(enCurso: List<RegistroFaena>, buzos: List<Buzo>) {
+        val prevFaenaId = _uiState.value.faenaSeleccionadaId
+        val nuevaFaenaId = prevFaenaId
+            ?.takeIf { id -> enCurso.any { it.id == id } }
+            ?: enCurso.firstOrNull()?.id
+        val cambioDeFaena = prevFaenaId != nuevaFaenaId || _uiState.value.buzoEvaluadoId == null
         _uiState.update { s ->
-            val seleccionada = s.faenaSeleccionadaId
-                ?.takeIf { id -> enCurso.any { it.id == id } }
-                ?: enCurso.firstOrNull()?.id
-            s.copy(buzos = buzos, faenas = enCurso, faenaSeleccionadaId = seleccionada)
+            s.copy(buzos = buzos, faenas = enCurso, faenaSeleccionadaId = nuevaFaenaId)
         }
-        recalcular()
+        recalcular(cargarDatosBuzo = cambioDeFaena)
     }
 
-    /** Qué momento está habilitado y qué encuesta ya existe, según lo que dice la propia faena. */
-    private fun recalcular() {
+    /** Qué momento está habilitado y qué encuesta ya existe, sincronizando los parámetros del semáforo. */
+    private fun recalcular(cargarDatosBuzo: Boolean = false) {
         val s = _uiState.value
         val faena = s.faenaSeleccionada
         if (faena == null) {
@@ -188,13 +288,53 @@ class SaludViewModel(
             return
         }
         val avance = repository.avanceDe(faena)
-        _uiState.update {
-            it.copy(
+        val asignaciones = faena.asignaciones()
+
+        // Si no se ha elegido un buzo concreto de la tripulación, priorizar si alguno tiene bloqueo (>45 sin test)
+        val buzoTargetId = s.buzoEvaluadoId?.takeIf { id -> asignaciones.any { it.buzoId == id } }
+            ?: asignaciones.firstOrNull { asig ->
+                s.buzos.firstOrNull { it.id == asig.buzoId }?.bloqueadoPorEdadSinTestEsfuerzo == true
+            }?.buzoId
+            ?: faena.buzoId
+
+        val buzoObj = s.buzos.firstOrNull { it.id == buzoTargetId }
+        val todasRevisiones = avance.buzos.values.flatMap {
+            it.etapas[EtapaComprobacion.PRE_EQUIPACION].orEmpty()
+        }
+        val inutilizables = todasRevisiones.count { it.estado == EstadoEquipo.INUTILIZABLE }
+        val riesgosos = todasRevisiones.count { it.estado == EstadoEquipo.UTILIZABLE_RIESGOSO }
+
+        _uiState.update { state ->
+            state.copy(
+                buzoEvaluadoId = buzoTargetId,
                 bloqueo = faena.bloqueoEncuesta(s.momento, avance),
-                encuestaRegistrada = avance.encuestas[s.momento]
+                encuestaRegistrada = avance.encuestas[s.momento],
+                equiposInutilizablesCount = inutilizables,
+                equiposRiesgososCount = riesgosos,
+                edadBuzo = if (cargarDatosBuzo && buzoObj?.edadAnios != null) buzoObj.edadAnios.toString() else state.edadBuzo,
+                testEsfuerzo = if (cargarDatosBuzo && buzoObj != null) buzoObj.testEsfuerzoVigente else state.testEsfuerzo,
+                examenPreocupacional = if (cargarDatosBuzo && buzoObj != null) buzoObj.examenPreocupacionalVigente else state.examenPreocupacional,
+                puntajeCalbuco = if (cargarDatosBuzo && buzoObj != null) buzoObj.puntajeCalbuco.toString() else state.puntajeCalbuco
             )
         }
     }
+
+    // Mutadores validación cruzada semáforo
+    fun onEdadBuzoChange(v: String) {
+        if (v.all { it.isDigit() } && v.length <= 2) {
+            _uiState.update { it.copy(edadBuzo = v) }
+        }
+    }
+
+    fun onPuntajeCalbucoChange(v: String) {
+        if (v.all { it.isDigit() } && v.length <= 3) {
+            _uiState.update { it.copy(puntajeCalbuco = v) }
+        }
+    }
+
+    fun onExamenPreocupacionalChange(v: Boolean) = _uiState.update { it.copy(examenPreocupacional = v) }
+    fun onCompresorCumpleChange(v: Boolean) = _uiState.update { it.copy(compresorCumple = v) }
+    fun onBuzoEmergenciaCumpleChange(v: Boolean) = _uiState.update { it.copy(buzoEmergenciaCumple = v) }
 
     // Mutadores signos vitales
     fun onPresionChange(v: String) = _uiState.update { it.copy(presionArterial = v) }
@@ -238,7 +378,8 @@ class SaludViewModel(
         }
 
         // Validar campos obligatorios
-        if (!state.signosEnRango ||
+        if (state.pulso == null || state.sistolica == null || state.diastolica == null ||
+            state.edadBuzoVal == null || state.puntajeCalbucoVal == null ||
             state.colesterolVal == null || state.hdlVal == null ||
             state.ldlVal == null || state.trigliceridosVal == null ||
             state.glicemiaVal == null
@@ -246,19 +387,29 @@ class SaludViewModel(
             _uiState.update {
                 it.copy(
                     mostrarErrores = true,
-                    userMessage = "Complete todos los campos obligatorios antes de emitir el dictamen."
+                    userMessage = "Complete todos los campos numéricos obligatorios con formato válido antes de emitir el dictamen."
                 )
             }
             return
         }
 
-        // La faena decide si la encuesta puede registrarse (orden del flujo); el repositorio la guarda.
+        // La faena decide si la encuesta puede registrarse (orden del flujo); el repositorio la guarda junto con el semáforo.
         repository.registrarEncuestaSalud(
             faenaId = faena.id,
             momento = state.momento,
             esApto = state.esApto,
             presionArterial = state.presionArterial.trim(),
-            frecuenciaCardiaca = state.pulso!!
+            frecuenciaCardiaca = state.pulso!!,
+            semaforo = state.semaforo,
+            motivosBloqueo = state.motivosBloqueo,
+            advertencias = state.advertenciasSemaforo,
+            buzoEvaluadoId = buzo.id,
+            edadBuzo = state.edadBuzoVal,
+            testEsfuerzoVigente = state.testEsfuerzo,
+            examenPreocupacionalVigente = state.examenPreocupacional,
+            puntajeCalbuco = state.puntajeCalbucoVal,
+            compresorCumple = state.compresorCumple,
+            buzoEmergenciaCumple = state.buzoEmergenciaCumple
         ).onFailure { error ->
             _uiState.update { it.copy(userMessage = error.message ?: "No se pudo registrar la encuesta.") }
             return
@@ -290,32 +441,19 @@ class SaludViewModel(
         )
         repository.registrarChequeoMedico(nuevoChequeo)
 
-        val mensaje = if (state.esApto) {
-            "Encuesta (${state.momento.etiqueta}) de ${faena.id} registrada: ${buzo.nombre} declarado APTO."
-        } else {
-            "Alerta: ${buzo.nombre} declarado NO APTO (${state.momento.etiqueta}, ${faena.id}). Notificado a supervisor."
+        val mensaje = when (state.semaforo) {
+            ColorSemaforo.VERDE ->
+                "Semáforo VERDE (${state.momento.etiqueta}) en ${faena.id}: ${buzo.nombre} declarado APTO."
+            ColorSemaforo.AMARILLO ->
+                "Semáforo AMARILLO (${state.momento.etiqueta}) en ${faena.id}: ${buzo.nombre} APTO con observaciones."
+            ColorSemaforo.ROJO ->
+                "Semáforo ROJO (${state.momento.etiqueta}) en ${faena.id}: BLOQUEO para ${buzo.nombre}. ${state.motivoNoApto}"
         }
 
         _uiState.update {
             it.copy(
                 userMessage = mensaje,
-                mostrarErrores = false,
-                colesterol = "180",
-                hdl = "50",
-                ldl = "105",
-                trigliceridos = "130",
-                glicemiaBasal = "90",
-                hemograma = true,
-                testEsfuerzo = true,
-                gastroIntestinal = true,
-                cardiovascular = true,
-                audiometria = true,
-                optometria = true,
-                electrocardiograma = true,
-                descansoAdecuado = true,
-                sinSustancias = true,
-                sinCongestion = true,
-                condicionOptima = true
+                mostrarErrores = false
             )
         }
     }

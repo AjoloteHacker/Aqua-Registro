@@ -20,8 +20,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -150,9 +152,47 @@ fun LoginScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        var rutLoginField by remember {
+                            mutableStateOf(
+                                TextFieldValue(
+                                    text = uiState.rutLogin,
+                                    selection = TextRange(uiState.rutLogin.length)
+                                )
+                            )
+                        }
+                        LaunchedEffect(uiState.rutLogin) {
+                            if (rutLoginField.text != uiState.rutLogin) {
+                                rutLoginField = TextFieldValue(
+                                    text = uiState.rutLogin,
+                                    selection = TextRange(uiState.rutLogin.length)
+                                )
+                            }
+                        }
+
                         OutlinedTextField(
-                            value = uiState.rutLogin,
-                            onValueChange = { viewModel.onRutLoginChange(it) },
+                            value = rutLoginField,
+                            onValueChange = { newValue ->
+                                val textoEntrada = if (
+                                    !newValue.text.contains("@") &&
+                                    rutLoginField.text.contains('-') &&
+                                    !newValue.text.contains('-') &&
+                                    newValue.text.length == rutLoginField.text.length - 1
+                                ) {
+                                    uiState.rutLogin.filter { it.isDigit() || it.equals('k', ignoreCase = true) }.dropLast(1)
+                                } else {
+                                    newValue.text
+                                }
+                                viewModel.onRutLoginChange(textoEntrada)
+                                val nuevoTexto = if (textoEntrada.contains("@")) {
+                                    textoEntrada
+                                } else {
+                                    com.example.myapplication.util.Rutificador.formatearEnVivo(textoEntrada)
+                                }
+                                rutLoginField = TextFieldValue(
+                                    text = nuevoTexto,
+                                    selection = TextRange(nuevoTexto.length)
+                                )
+                            },
                             label = { Text("RUT o Correo del Prevencionista") },
                             leadingIcon = {
                                 Icon(Icons.Default.Badge, contentDescription = "RUT", tint = AquaPrimary)
@@ -248,22 +288,61 @@ fun LoginScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        Surface(
-                            color = AquaBackground,
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Text(
+                                text = "Perfiles de prueba por Rol (toca para autocompletar):",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AquaTextSecondary
+                            )
+                            Surface(
+                                color = AquaBackground,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.cargarPerfilDemo("12.345.678-5", "admin123")
+                                    }
                             ) {
-                                Icon(Icons.Default.Info, contentDescription = null, tint = AquaSecondary, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Demo: 12.345.678-5 / admin123",
-                                    fontSize = 11.sp,
-                                    color = AquaTextSecondary
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = AquaPrimary, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Rol Supervisor: 12.345.678-5 / admin123",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = AquaPrimary
+                                    )
+                                }
+                            }
+                            Surface(
+                                color = AquaBackground,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.cargarPerfilDemo("18.765.432-K", "operador123")
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Engineering, contentDescription = null, tint = AquaTextSecondary, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Rol Operador (restringido): 18.765.432-K / operador123",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = AquaTextSecondary
+                                    )
+                                }
                             }
                         }
 
@@ -297,10 +376,43 @@ fun LoginScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        var regRutField by remember(uiState.selectedTab) {
+                            mutableStateOf(
+                                TextFieldValue(
+                                    text = uiState.regRut,
+                                    selection = TextRange(uiState.regRut.length)
+                                )
+                            )
+                        }
+                        LaunchedEffect(uiState.regRut) {
+                            if (regRutField.text != uiState.regRut) {
+                                regRutField = TextFieldValue(
+                                    text = uiState.regRut,
+                                    selection = TextRange(uiState.regRut.length)
+                                )
+                            }
+                        }
+
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
-                                value = uiState.regRut,
-                                onValueChange = { viewModel.onRegRutChange(it) },
+                                value = regRutField,
+                                onValueChange = { newValue ->
+                                    val textoEntrada = if (
+                                        regRutField.text.contains('-') &&
+                                        !newValue.text.contains('-') &&
+                                        newValue.text.length == regRutField.text.length - 1
+                                    ) {
+                                        uiState.regRut.filter { it.isDigit() || it.equals('k', ignoreCase = true) }.dropLast(1)
+                                    } else {
+                                        newValue.text
+                                    }
+                                    viewModel.onRegRutChange(textoEntrada)
+                                    val formateado = com.example.myapplication.util.Rutificador.formatearEnVivo(textoEntrada)
+                                    regRutField = TextFieldValue(
+                                        text = formateado,
+                                        selection = TextRange(formateado.length)
+                                    )
+                                },
                                 label = { Text("RUT *") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f),

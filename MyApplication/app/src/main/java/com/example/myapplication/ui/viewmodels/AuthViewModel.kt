@@ -3,6 +3,7 @@ package com.example.myapplication.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.model.Prevencionista
+import com.example.myapplication.data.model.RolUsuario
 import com.example.myapplication.data.repository.AquaRepository
 import com.example.myapplication.util.Rutificador
 import com.example.myapplication.util.SecurityUtils
@@ -27,6 +28,7 @@ data class AuthUiState(
     val regPasswordConfirm: String = "",
     val regPasswordVisible: Boolean = false,
     val regAceptaTerminos: Boolean = true,
+    val regRol: RolUsuario = RolUsuario.SUPERVISOR,
 
     val centrosDisponibles: List<String> = emptyList(),
     val errorMessage: String? = null,
@@ -52,7 +54,8 @@ class AuthViewModel(
     }
 
     fun onRutLoginChange(value: String) {
-        _uiState.update { it.copy(rutLogin = value, errorMessage = null) }
+        val formateado = if (value.contains("@")) value else Rutificador.formatearEnVivo(value)
+        _uiState.update { it.copy(rutLogin = formateado, errorMessage = null) }
     }
 
     fun onPasswordLoginChange(value: String) {
@@ -69,7 +72,8 @@ class AuthViewModel(
 
     fun onRegRutChange(value: String) {
         val filtrado = value.filter { it.isDigit() || it.equals('k', ignoreCase = true) || it == '.' || it == '-' }
-        _uiState.update { it.copy(regRut = filtrado, errorMessage = null) }
+        val autoFormateado = Rutificador.formatearEnVivo(filtrado)
+        _uiState.update { it.copy(regRut = autoFormateado, errorMessage = null) }
     }
 
     fun onRegSeremiChange(value: String) {
@@ -98,6 +102,20 @@ class AuthViewModel(
 
     fun onRegAceptaTerminosChange(value: Boolean) {
         _uiState.update { it.copy(regAceptaTerminos = value) }
+    }
+
+    fun onRegRolChange(rol: RolUsuario) {
+        _uiState.update { it.copy(regRol = rol) }
+    }
+
+    fun cargarPerfilDemo(rut: String, contrasena: String) {
+        _uiState.update {
+            it.copy(
+                rutLogin = rut,
+                passwordLogin = contrasena,
+                errorMessage = null
+            )
+        }
     }
 
     fun clearMessages() {
@@ -192,7 +210,8 @@ class AuthViewModel(
             correo = state.regCorreo.trim(),
             registroSeremi = state.regSeremi.trim().uppercase(),
             centro = state.regCentro,
-            contrasena = state.regPassword
+            contrasena = state.regPassword,
+            rol = state.regRol
         )
 
         val result = repository.registrarPrevencionista(nuevo)

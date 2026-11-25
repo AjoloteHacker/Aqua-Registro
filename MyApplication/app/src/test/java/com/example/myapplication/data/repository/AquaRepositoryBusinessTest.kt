@@ -202,6 +202,72 @@ class AquaRepositoryBusinessTest {
         assertFalse(repository.etapaConfirmada(faena.id, faena.socorristaId, etapa))
     }
 
+    @Test
+    fun modoOffline_marcaRegistrosComoPendientesDeSincronizar() {
+        val EstabaConectado = repository.isNetworkConnected.value
+        if (EstabaConectado) {
+            repository.alternarModoOfflineDemo()
+        }
+        assertFalse(repository.isNetworkConnected.value)
+
+        val faenaOffline = faenaDePruebaEquipos().copy(id = "F-OFFLINE-TEST")
+        repository.autorizarFaena(faenaOffline)
+
+        assertTrue("F-OFFLINE-TEST" in repository.pendientesSincronizarIds.value)
+        assertTrue(repository.syncStatus.value.contains("Pendiente de sincronizar"))
+
+        // Restaurar estado online
+        repository.alternarModoOfflineDemo()
+        assertTrue(repository.isNetworkConnected.value)
+    }
+
+    @Test
+    fun catalogoEquipos_incluyeCuatroEquiposCriticosDeLineaBaseExigidos() {
+        val catalogo = repository.obtenerEquiposDefault()
+        assertEquals(9, catalogo.size)
+
+        val nombres = catalogo.map { it.nombre.lowercase() }
+        assertTrue(nombres.any { it.contains("maleta de suministro de aire") })
+        assertTrue(nombres.any { it.contains("filtros de compresor") })
+        assertTrue(nombres.any { it.contains("aletas") })
+        assertTrue(nombres.any { it.contains("census") })
+
+        val faena = faenaDePruebaEquipos()
+        val revisiones = repository.revisionesCombinadas(faena, faena.buzoId, EtapaComprobacion.PRE_EQUIPACION)
+        val criticos = revisiones.filter { it.esEquipoCriticoLineaBase }
+        assertEquals(4, criticos.size)
+        assertEquals(
+            setOf("MALETA_AIRE", "FILTROS_COMPRESOR", "ALETAS", "CENSUS"),
+            criticos.map { it.codigoTipoEquipoBackend }.toSet()
+        )
+        assertTrue(criticos.all { it.fotoLineaBaseRef.startsWith("LB-") })
+    }
+
+    @Test
+    fun rolOperador_noPuedeAprobarNiCerrarFaena_soloSupervisor() {
+        val faena = faenaDePruebaEquipos().copy(id = "F-ROL-TEST")
+        repository.autorizarFaena(faena)
+
+        // Iniciar sesión con el segundo perfil de prueba (Rol Operador)
+        val loginOperador = repository.login("18.765.432-K", "operador123")
+        assertTrue(loginOperador.isSuccess)
+        assertFalse(loginOperador.getOrNull()?.esSupervisor ?: true)
+
+        val intentoAprobar = repository.aprobarDatosFaena("F-ROL-TEST")
+        assertTrue(intentoAprobar.isFailure)
+        assertTrue(intentoAprobar.exceptionOrNull()?.message?.contains("Restricción de Rol") == true)
+
+        val intentoCerrar = repository.completarFaena("F-ROL-TEST")
+        assertTrue(intentoCerrar.isFailure)
+        assertTrue(intentoCerrar.exceptionOrNull()?.message?.contains("Restricción de Rol") == true)
+
+        // Volver a iniciar sesión como Supervisor
+        val loginSupervisor = repository.login("12.345.678-5", "admin123")
+        assertTrue(loginSupervisor.isSuccess)
+        assertTrue(loginSupervisor.getOrNull()?.esSupervisor == true)
+        assertTrue(repository.aprobarDatosFaena("F-ROL-TEST").isSuccess)
+    }
+
     private fun faenaDePruebaEquipos() = RegistroFaena(
         id = "F-TEST-EQUIPOS",
         buzoId = "1",

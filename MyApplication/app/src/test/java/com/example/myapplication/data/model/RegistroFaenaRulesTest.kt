@@ -280,6 +280,126 @@ class RegistroFaenaRulesTest {
         assertEquals(2, faenaBase.novedades(avanceConRiesgo).count { it.contains(revisionRiesgosa.nombre) })
     }
 
+    @Test
+    fun equipoEnEstadoInutilizableNoCumple_bloqueaCierreYDisparaSemaforoRojo() {
+        val faenaAprobada = faenaBase.aprobar("Cristóbal Loncón", "21/11/2026 10:00").getOrThrow()
+        val equipoInutilizable = RevisionEquipo(
+            equipoId = "e1",
+            categoria = "Crítico",
+            nombre = "Compresor / Suministro de aire",
+            descripcionUso = "Suministro principal",
+            estado = EstadoEquipo.INUTILIZABLE,
+            descripcionEstado = "Falla en presión de salida - No cumple"
+        )
+        val avanceConEquipoInutilizable = avance(
+            ejecutor = avanceBuzo(
+                buzo = buzoTest,
+                revisiones = EtapaComprobacion.entries.associateWith { listOf(equipoInutilizable) }
+            )
+        )
+
+        val pendientes = faenaAprobada.pendientes(avanceConEquipoInutilizable)
+        assertTrue(pendientes.any { it.categoria == CategoriaPendiente.EQUIPOS && it.detalle.contains("No cumple") })
+        assertFalse(faenaAprobada.puedeFinalizar(avanceConEquipoInutilizable))
+        assertEquals(ColorSemaforo.ROJO, faenaAprobada.semaforo(avanceConEquipoInutilizable))
+    }
+
+    @Test
+    fun buzoMayor45SinTestEsfuerzo_bloqueaCierreDeFaenaYDisparaSemaforoRojo() {
+        val faenaAprobada = faenaBase.aprobar("Cristóbal Loncón", "21/11/2026 10:00").getOrThrow()
+        val buzoMayorSinTest = socorristaTest.copy(
+            edad = java.time.LocalDate.now().minusYears(47),
+            testEsfuerzoVigente = false
+        )
+        val avanceConMayorSinTest = avance(
+            socorrista = avanceBuzo(buzo = buzoMayorSinTest)
+        )
+
+        val pendientes = faenaAprobada.pendientes(avanceConMayorSinTest)
+        assertTrue(pendientes.any { it.categoria == CategoriaPendiente.SALUD && it.detalle.contains(">45") })
+        assertFalse(faenaAprobada.puedeFinalizar(avanceConMayorSinTest))
+        assertEquals(ColorSemaforo.ROJO, faenaAprobada.semaforo(avanceConMayorSinTest))
+    }
+
+    @Test
+    fun bitacoraPostInmersion_velocidadDescensoOAscensoExcesiva_alertaJefeDeCentro() {
+        val bitacoraDescensoExcesivo = BitacoraPostInmersion(
+            id = "BIT-T1",
+            faenaId = "F-100",
+            buzoId = "B-1",
+            buzoNombre = "Carlos Soto",
+            fechaHora = "21/11/2026 11:00",
+            profundidadMetros = 20,
+            tiempoFondoMinutos = 30,
+            velocidadDescensoMpm = 27.5, // > 24.0 m/min
+            velocidadAscensoMpm = 8.0
+        )
+        assertTrue(bitacoraDescensoExcesivo.superaDescenso)
+        assertFalse(bitacoraDescensoExcesivo.superaAscenso)
+        assertTrue(bitacoraDescensoExcesivo.alertaVelocidadSuperada)
+        assertTrue(bitacoraDescensoExcesivo.detalleAlerta.contains("JEFE DE CENTRO"))
+        assertTrue(bitacoraDescensoExcesivo.detalleAlerta.contains("24.0"))
+
+        val bitacoraAscensoExcesivo = bitacoraDescensoExcesivo.copy(
+            id = "BIT-T2",
+            velocidadDescensoMpm = 18.0,
+            velocidadAscensoMpm = 11.2 // > 9.0 m/min
+        )
+        assertFalse(bitacoraAscensoExcesivo.superaDescenso)
+        assertTrue(bitacoraAscensoExcesivo.superaAscenso)
+        assertTrue(bitacoraAscensoExcesivo.alertaVelocidadSuperada)
+        assertTrue(bitacoraAscensoExcesivo.detalleAlerta.contains("9.0"))
+
+        val bitacoraNormal = bitacoraDescensoExcesivo.copy(
+            id = "BIT-T3",
+            velocidadDescensoMpm = 18.0,
+            velocidadAscensoMpm = 7.5
+        )
+        assertFalse(bitacoraNormal.alertaVelocidadSuperada)
+        assertEquals("CONFORME", bitacoraNormal.estadoRevision)
+    }
+
+    @Test
+    fun cerrarFaenaSinTerminar_marcaAutomaticamenteEquipoYSalud_yPermiteEditarComentarioPostCierre() {
+        val equipoMalEstado = RevisionEquipo(
+            equipoId = "e1",
+            categoria = "Crítico",
+            nombre = "Maleta de aire",
+            descripcionUso = "Suministro",
+            estado = EstadoEquipo.INUTILIZABLE,
+            descripcionEstado = "Válvula dañada"
+        )
+        val encuestaNoApta = crearEncuestaApto(MomentoSalud.ANTES).copy(esApto = false)
+        val avanceConFallas = avance(
+            ejecutor = avanceBuzo(
+                buzo = buzoTest,
+                revisiones = mapOf(EtapaComprobacion.PRE_EQUIPACION to listOf(equipoMalEstado))
+            ),
+            encuestas = mapOf(MomentoSalud.ANTES to encuestaNoApta)
+        )
+
+        val automaticos = faenaBase.motivosAutomaticosCierre(avanceConFallas)
+        assertTrue(MotivoCierreSinTerminar.EQUIPO_MAL_ESTADO in automaticos)
+        assertTrue(MotivoCierreSinTerminar.BUZOS_ENFERMOS in automaticos)
+
+        val cerrada = faenaBase.cerrarSinTerminar(
+            motivosSeleccionados = setOf(MotivoCierreSinTerminar.MAL_TIEMPO, MotivoCierreSinTerminar.OTRO),
+            otrosMotivos = listOf("Marejada fuerte en canal", "Corriente submarina > 3 nudos"),
+            comentario = "Se suspende inmersión por seguridad.",
+            cerradoPor = "Cristóbal Loncón",
+            fechaHora = "24/11/2026 12:00",
+            avance = avanceConFallas
+        ).getOrThrow()
+
+        assertTrue(cerrada.cerradaSinTerminar)
+        assertFalse(cerrada.enCurso)
+        assertEquals(4, cerrada.cierreSinTerminar?.motivos?.size)
+        assertEquals(2, cerrada.cierreSinTerminar?.otrosMotivos?.size)
+
+        val conComentarioEditado = cerrada.actualizarComentarioCierre("Comentario actualizado post-cierre.").getOrThrow()
+        assertEquals("Comentario actualizado post-cierre.", conComentarioEditado.cierreSinTerminar?.comentario)
+    }
+
     // ───────── Helpers ─────────
 
     private fun avanceBuzo(

@@ -1,9 +1,11 @@
 package com.example.myapplication.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -18,15 +20,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.myapplication.data.Chequeo
+import com.example.myapplication.data.model.ColorSemaforo
 import com.example.myapplication.data.model.MomentoSalud
 import com.example.myapplication.ui.components.AquaScaffold
+import com.example.myapplication.ui.components.RuedaSelectorCard
 import com.example.myapplication.ui.theme.*
+import com.example.myapplication.ui.viewmodels.SaludUiState
 import com.example.myapplication.ui.viewmodels.SaludViewModel
+import java.util.Locale
 
 
 private fun textoNumericoValido(texto: String, decimal: Boolean): Boolean =
@@ -205,6 +212,51 @@ fun SaludScreen(
                     }
                 }
 
+                if (uiState.tripulacionFaena.size > 1) {
+                    Text(
+                        text = "Buzo de la tripulación a evaluar en Semáforo:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AquaTextSecondary
+                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        uiState.tripulacionFaena.forEach { asig ->
+                            val buzoItem = uiState.buzos.firstOrNull { it.id == asig.buzoId }
+                            val tieneAlertaEdad = buzoItem?.bloqueadoPorEdadSinTestEsfuerzo == true
+                            FilterChip(
+                                selected = uiState.buzoSeleccionado?.id == asig.buzoId,
+                                onClick = { viewModel.seleccionarBuzoEvaluado(asig.buzoId) },
+                                modifier = Modifier.fillMaxWidth(),
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (tieneAlertaEdad) Icons.Default.WarningAmber else Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = if (tieneAlertaEdad) SafetyDanger else AquaPrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = {
+                                    val edadTxt = buzoItem?.edadAnios?.let { " ($it años)" }.orEmpty()
+                                    Text(
+                                        text = "${asig.rol.corto}: ${asig.buzoNombre}$edadTxt",
+                                        fontSize = 12.sp,
+                                        fontWeight = if (uiState.buzoSeleccionado?.id == asig.buzoId) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = if (tieneAlertaEdad) SafetyCardBgDanger else AquaPrimary.copy(alpha = 0.15f),
+                                    selectedLabelColor = if (tieneAlertaEdad) SafetyDanger else AquaPrimary
+                                )
+                            )
+                        }
+                    }
+                }
+
                 uiState.bloqueo?.let { motivo ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -268,43 +320,104 @@ fun SaludScreen(
             }
 
             if (uiState.faenaSeleccionada != null && uiState.bloqueo == null) {
-                // Card de dictamen preventivo
-                Card(
+                // Tarjeta de Semáforo Industrial (Verde / Amarillo / Rojo) - Anexo A EA4 / EA5
+                SemaforoIndustrialCard(uiState = uiState)
+
+                // Sección 0: Validación Cruzada y Equipos Críticos (Semáforo Industrial)
+                ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (uiState.esApto) SafetyCardBgSuccess else SafetyCardBgDanger
-                    )
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Color.White)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = if (uiState.esApto) Icons.Default.VerifiedUser else Icons.Default.WarningAmber,
-                            contentDescription = "Estado Apto",
-                            tint = if (uiState.esApto) SafetySuccess else SafetyDanger,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             Text(
-                                text = if (uiState.esApto) "ESTADO: APTO PARA INMERSIÓN" else "ESTADO: NO APTO (ALERTA)",
+                                text = "0. Validación Cruzada · Semáforo Industrial",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = if (uiState.esApto) SafetySuccess else SafetyDanger
+                                fontSize = 14.sp,
+                                color = AquaPrimary
                             )
-                            Text(
-                                text = if (uiState.esApto)
-                                    "El buzo cumple con todos los parámetros fisiológicos para faena."
-                                else
-                                    uiState.motivoNoApto,
-                                fontSize = 12.sp,
-                                color = AquaTextSecondary
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                uiState.buzoSeleccionado?.edadAnios?.let { edad ->
+                                    Surface(
+                                        color = if (edad > 45 && !uiState.testEsfuerzo) SafetyCardBgDanger else AquaBackground,
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "$edad años",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (edad > 45 && !uiState.testEsfuerzo) SafetyDanger else AquaTextPrimary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                uiState.buzoSeleccionado?.let { buzo ->
+                                    Surface(
+                                        color = if (buzo.puntajeCalbuco >= 70) SafetyCardBgSuccess else Color(0xFFFEF3C7),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Escuela: ${buzo.puntajeCalbuco}%",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (buzo.puntajeCalbuco >= 70) SafetySuccess else Color(0xFFB45309),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                uiState.imcBuzo?.let { imc ->
+                                    Surface(
+                                        color = if (imc in 19.0..30.0) SafetyCardBgSuccess else Color(0xFFFEF3C7),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "IMC: ${String.format(Locale.US, "%.1f", imc)}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (imc in 19.0..30.0) SafetySuccess else Color(0xFFB45309),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
+
+                        PreguntaSaludSwitch(
+                            pregunta = "¿Cuenta con Test de Esfuerzo vigente? (Obligatorio si >45 años)",
+                            checked = uiState.testEsfuerzo,
+                            onCheckedChange = { viewModel.onTestEsfuerzoChange(it) }
+                        )
+                        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                        PreguntaSaludSwitch(
+                            pregunta = "¿Cuenta con Examen Médico Preocupacional vigente?",
+                            checked = uiState.examenPreocupacional,
+                            onCheckedChange = { viewModel.onExamenPreocupacionalChange(it) }
+                        )
+                        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                        PreguntaSaludSwitch(
+                            pregunta = "¿Compresor principal de aire operativo («Cumple»)?",
+                            checked = uiState.compresorCumple,
+                            onCheckedChange = { viewModel.onCompresorCumpleChange(it) }
+                        )
+                        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                        PreguntaSaludSwitch(
+                            pregunta = "¿Buzo de emergencia / socorrista en superficie («Cumple»)?",
+                            checked = uiState.buzoEmergenciaCumple,
+                            onCheckedChange = { viewModel.onBuzoEmergenciaCumpleChange(it) }
+                        )
                     }
                 }
 
@@ -327,14 +440,18 @@ fun SaludScreen(
                             color = AquaPrimary
                         )
 
+                        val opcionesPulso = remember { (45..130).map { it.toString() } }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedTextField(
                                 value = uiState.presionArterial,
                                 onValueChange = { viewModel.onPresionChange(it) },
                                 label = { Text("Presión (mmHg)") },
+                                leadingIcon = { Icon(Icons.Default.MonitorHeart, contentDescription = null, tint = AquaPrimary) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true,
                                 isError = !uiState.presionValida,
@@ -342,17 +459,14 @@ fun SaludScreen(
                                     if (!uiState.presionValida) Text("Ej: 120/80")
                                 }
                             )
-                            OutlinedTextField(
-                                value = uiState.frecuenciaCardiaca,
-                                onValueChange = { viewModel.onFrecuenciaChange(it) },
-                                label = { Text("Pulso (lpm)") },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                isError = !uiState.pulsoValido,
-                                supportingText = {
-                                    if (!uiState.pulsoValido) Text("50-100 lpm")
-                                }
+                            RuedaSelectorCard(
+                                titulo = "Pulso",
+                                unidad = "lpm",
+                                icono = Icons.Default.Favorite,
+                                opciones = opcionesPulso,
+                                valorSeleccionado = uiState.frecuenciaCardiaca.ifBlank { "72" },
+                                onValorChange = { viewModel.onFrecuenciaChange(it) },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -512,19 +626,37 @@ fun SaludScreen(
                     }
                 }
 
-                // Botón de emisión de dictamen
+                // Botón de emisión de dictamen con color de Semáforo
+                val colorBotonDictamen = when (uiState.semaforo) {
+                    ColorSemaforo.VERDE -> SafetySuccess
+                    ColorSemaforo.AMARILLO -> Color(0xFFD97706)
+                    ColorSemaforo.ROJO -> SafetyDanger
+                }
                 Button(
                     onClick = { viewModel.guardarDictamen() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (uiState.esApto) AquaPrimary else SafetyDanger
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = colorBotonDictamen)
                 ) {
+                    Icon(
+                        imageVector = when (uiState.semaforo) {
+                            ColorSemaforo.VERDE -> Icons.Default.CheckCircle
+                            ColorSemaforo.AMARILLO -> Icons.Default.WarningAmber
+                            ColorSemaforo.ROJO -> Icons.Default.Block
+                        },
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (uiState.esApto) "GUARDAR Y EMITIR DICTAMEN: APTO" else "GUARDAR DICTAMEN: NO APTO",
+                        text = when (uiState.semaforo) {
+                            ColorSemaforo.VERDE -> "GUARDAR PRE-CHEQUEO · SEMÁFORO VERDE"
+                            ColorSemaforo.AMARILLO -> "GUARDAR PRE-CHEQUEO · SEMÁFORO AMARILLO"
+                            ColorSemaforo.ROJO -> "REGISTRAR BLOQUEO · SEMÁFORO ROJO"
+                        },
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -583,7 +715,10 @@ fun SaludScreen(
 }
 
 @Composable
-fun RegistroMedicoItem(chequeo: Chequeo) {
+fun RegistroMedicoItem(
+    chequeo: Chequeo,
+    pendienteSincronizar: Boolean = false
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -647,7 +782,156 @@ fun RegistroMedicoItem(chequeo: Chequeo) {
                 color = AquaPrimary
             )
         }
+        if (pendienteSincronizar) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.CloudUpload,
+                    contentDescription = null,
+                    tint = Color(0xFFB45309),
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Pendiente de sincronizar (Room)",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFB45309)
+                )
+            }
+        }
     }
+}
+
+@Composable
+fun SemaforoIndustrialCard(uiState: SaludUiState) {
+    val semaforo = uiState.semaforo
+    val (colorPrincipal, colorFondo) = when (semaforo) {
+        ColorSemaforo.VERDE -> SafetySuccess to SafetyCardBgSuccess
+        ColorSemaforo.AMARILLO -> Color(0xFFD97706) to Color(0xFFFEF3C7)
+        ColorSemaforo.ROJO -> SafetyDanger to SafetyCardBgDanger
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = colorFondo),
+        border = BorderStroke(1.5.dp, colorPrincipal)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = when (semaforo) {
+                            ColorSemaforo.VERDE -> Icons.Default.VerifiedUser
+                            ColorSemaforo.AMARILLO -> Icons.Default.WarningAmber
+                            ColorSemaforo.ROJO -> Icons.Default.Block
+                        },
+                        contentDescription = semaforo.etiqueta,
+                        tint = colorPrincipal,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = semaforo.etiqueta,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 14.sp,
+                            color = colorPrincipal
+                        )
+                        Text(
+                            text = "Buzo: ${uiState.buzoSeleccionado?.nombre ?: "Sin seleccionar"} (${uiState.edadBuzo} años)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AquaTextPrimary
+                        )
+                    }
+                }
+
+                // 3 Luces del Semáforo Industrial (Rojo, Amarillo, Verde)
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF1E293B))
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LuzSemaforo(color = Color(0xFFEF4444), activa = semaforo == ColorSemaforo.ROJO)
+                    LuzSemaforo(color = Color(0xFFF59E0B), activa = semaforo == ColorSemaforo.AMARILLO)
+                    LuzSemaforo(color = Color(0xFF22C55E), activa = semaforo == ColorSemaforo.VERDE)
+                }
+            }
+
+            if (uiState.motivosBloqueo.isNotEmpty()) {
+                uiState.motivosBloqueo.forEach { motivo ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            imageVector = Icons.Default.Cancel,
+                            contentDescription = null,
+                            tint = SafetyDanger,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = motivo,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SafetyDanger
+                        )
+                    }
+                }
+            } else if (uiState.advertenciasSemaforo.isNotEmpty()) {
+                uiState.advertenciasSemaforo.forEach { adv ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = Color(0xFFB45309),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = adv,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFFB45309)
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = semaforo.resumen,
+                    fontSize = 12.sp,
+                    color = AquaTextSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LuzSemaforo(color: Color, activa: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(if (activa) 18.dp else 14.dp)
+            .clip(CircleShape)
+            .background(if (activa) color else color.copy(alpha = 0.22f))
+            .then(
+                if (activa) Modifier.border(2.dp, Color.White, CircleShape) else Modifier
+            )
+    )
 }
 
 @Composable

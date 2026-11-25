@@ -53,8 +53,8 @@ data class EquiposUiState(
     val completos get() = equipos.count { it.evaluacionCompleta }
     val fotosFaltantes get() = evidencia.faltan(etapa)
     val fotoCompleta get() = evidencia.estaCompleta(etapa)
-    /** Evaluación + evidencia del buzo y etapa actuales, listos para confirmar. */
-    val todoCompleto get() = equipos.isNotEmpty() && completos == equipos.size && fotoCompleta
+    /** Se completa al tener al menos 2 equipos evaluados (o todos si la lista tiene <= 2) + la evidencia fotográfica de la etapa. */
+    val todoCompleto get() = equipos.isNotEmpty() && completos >= minOf(2, equipos.size) && fotoCompleta
 }
 
 // ───────────────────────── ViewModel ─────────────────────────
@@ -132,6 +132,32 @@ class EquiposViewModel(
 
     fun actualizarDescripcion(equipoId: String, texto: String) {
         modificar(equipoId) { it.copy(descripcionEstado = texto) }
+    }
+
+    /** Registra la fotografía de un equipo crítico (maleta aire, filtros, aletas, Census) para comparar con Línea Base. */
+    fun registrarFotoEquipoCritico(equipoId: String, uri: String) {
+        modificar(equipoId) {
+            it.copy(
+                fotoActualUri = uri,
+                registradoEn = System.currentTimeMillis()
+            )
+        }
+    }
+
+    /** Actualiza el resultado de comparación visual contra la fotografía de Línea Base (Anexo B EA4/EA5). */
+    fun actualizarComparacionLineaBase(equipoId: String, coincide: Boolean, observacion: String? = null) {
+        modificar(equipoId) {
+            it.copy(
+                coincideConLineaBase = coincide,
+                observacionLineaBase = observacion ?: it.observacionLineaBase,
+                estado = if (!coincide) EstadoEquipo.INUTILIZABLE else it.estado,
+                descripcionEstado = if (!coincide && it.descripcionEstado.isBlank()) {
+                    "Discrepancia detectada frente a Línea Base (${it.fotoLineaBaseRef})"
+                } else {
+                    it.descripcionEstado
+                }
+            )
+        }
     }
 
     /** Llamar cuando la cámara devuelva la URI de una foto de evidencia de la etapa. */

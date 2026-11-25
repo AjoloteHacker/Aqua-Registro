@@ -30,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.EstadoSalud
+import com.example.myapplication.data.remote.RetrofitClient
 import androidx.compose.material.icons.automirrored.filled.FactCheck
 import com.example.myapplication.ui.viewmodels.MenuViewModel
 import com.example.myapplication.ui.components.AquaScaffold
@@ -56,7 +57,12 @@ fun MenuScreen(
     val isConnected by menuViewModel.isNetworkConnected.collectAsState()
     val climaMaritimo by menuViewModel.climaMaritimo.collectAsState()
     val syncStatus by menuViewModel.syncStatus.collectAsState()
+    val pendientesSync by menuViewModel.pendientesSincronizarIds.collectAsState()
+    val serverUrl by menuViewModel.serverUrl.collectAsState()
+    val servidorOnline by menuViewModel.servidorOnline.collectAsState()
+    val ultimoPingDetalle by menuViewModel.ultimoPingDetalle.collectAsState()
     val buzoUiState by buzoViewModel.uiState.collectAsState()
+    var mostrarDialogoServidor by remember { mutableStateOf(false) }
 
     val buzosAptos = remember(buzos) { buzos.count { it.estadoSalud == EstadoSalud.APTO } }
     val faenasPendientes = remember(faenas) { faenas.count { it.estado != "Completada con Éxito" } }
@@ -76,7 +82,7 @@ fun MenuScreen(
 
     AquaScaffold(
         title = prevencionista?.nombre ?: "Aqua-Registro",
-        subtitle = "Base: ${prevencionista?.centro ?: "AquaChile"} · SEREMI: ${prevencionista?.registroSeremi ?: "S/R"}",
+        subtitle = "${prevencionista?.rol?.etiqueta ?: "Supervisor"} · SEREMI: ${prevencionista?.registroSeremi ?: "S/R"}",
         snackbarHostState = snackbarHostState,
         onOpenDrawer = onOpenDrawer,
         actions = {
@@ -199,32 +205,94 @@ fun MenuScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    val hayPendientesSync = pendientesSync.isNotEmpty()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { menuViewModel.sincronizarAhora() }
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { menuViewModel.sincronizarAhora() }
                     ) {
                         Icon(
-                            imageVector = if (isConnected) Icons.Default.Sync else Icons.Default.WifiOff,
+                            imageVector = when {
+                                !isConnected -> Icons.Default.WifiOff
+                                hayPendientesSync -> Icons.Default.CloudUpload
+                                else -> Icons.Default.Sync
+                            },
                             contentDescription = "Estado de Sincronización",
-                            tint = if (isConnected) SafetySuccess else Color(0xFFF59E0B),
+                            tint = if (isConnected && !hayPendientesSync) SafetySuccess else Color(0xFFF59E0B),
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isConnected) syncStatus else "Modo Terreno Offline (Room)",
+                            text = when {
+                                !isConnected && hayPendientesSync ->
+                                    "Modo offline · Pendiente de sincronizar (${pendientesSync.size})"
+                                !isConnected ->
+                                    "Modo offline · Guardando en Room SQLite"
+                                hayPendientesSync ->
+                                    "Pendiente de sincronizar (${pendientesSync.size})"
+                                else -> syncStatus
+                            },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            color = if (isConnected) SafetySuccess else Color(0xFFB45309)
+                            color = if (isConnected && !hayPendientesSync) SafetySuccess else Color(0xFFB45309),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    if (isConnected) {
-                        Text(
-                            text = "Sincronizar ahora",
-                            fontSize = 10.sp,
-                            color = AquaPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.clickable { menuViewModel.sincronizarAhora() }
-                        )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isConnected) {
+                            Text(
+                                text = "Sincronizar",
+                                fontSize = 10.sp,
+                                color = AquaPrimary,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.clickable { menuViewModel.sincronizarAhora() }
+                            )
+                        }
+                        Surface(
+                            color = AquaPrimary.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.clickable {
+                                menuViewModel.probarConexionServidor()
+                                mostrarDialogoServidor = true
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Dns,
+                                    contentDescription = "Configurar Servidor",
+                                    tint = AquaPrimary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Servidor",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AquaPrimary
+                                )
+                            }
+                        }
+                        Surface(
+                            color = if (isConnected) AquaBackground else Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.clickable { menuViewModel.alternarModoOfflineDemo() }
+                        ) {
+                            Text(
+                                text = if (isConnected) "Modo Offline" else "Reconectar",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isConnected) AquaTextSecondary else Color(0xFFB45309),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -334,33 +402,7 @@ fun MenuScreen(
                 }
             }
 
-            // Nota informativa sobre el flujo unificado
-            Surface(
-                color = AquaPrimary.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = AquaPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Flujo Unificado: La faena incluye el control de 2 buzos, chequeo técnico de equipos y evaluación médica.",
-                        fontSize = 11.sp,
-                        color = AquaTextSecondary,
-                        lineHeight = 15.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // ==============================================================
             // ÍTEMS 2, 3 Y 4 DEL BOCETO: LAS 3 TARJETAS INFERIORES
@@ -418,300 +460,292 @@ fun MenuScreen(
             Spacer(modifier = Modifier.height(14.dp))
         }
 
-        // Diálogo para Registrar Nuevo Buzo (desde la pantalla principal)
-        if (buzoUiState.showAddDialog && buzoUiState.buzoAEditar == null) {
+        // Diálogos unificados de Registro de Buzo y Nueva Empresa Contratista (compartidos con BuzoScreen)
+        RegistrarEditarBuzoDialogs(
+            uiState = buzoUiState,
+            viewModel = buzoViewModel
+        )
+
+        // Pop-up al iniciar sesión cuando algún buzo tiene menos de 15 días de vigencia de matrícula o está vencida
+        var mostrarPopUpMatriculas by remember { mutableStateOf(true) }
+        val buzosAlertaCriticaMatricula = remember(buzos) {
+            buzos.filter { it.matriculaCriticaMenos15Dias || it.matriculaVencida }
+        }
+        if (mostrarPopUpMatriculas && buzosAlertaCriticaMatricula.isNotEmpty()) {
             AlertDialog(
-                onDismissRequest = { buzoViewModel.closeAddDialog() },
+                onDismissRequest = { mostrarPopUpMatriculas = false },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.WarningAmber,
+                        contentDescription = null,
+                        tint = SafetyDanger,
+                        modifier = Modifier.size(32.dp)
+                    )
+                },
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.PersonAdd,
-                            contentDescription = null,
-                            tint = AquaPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Registrar Nuevo Buzo",
-                            fontWeight = FontWeight.Bold,
-                            color = AquaPrimary
-                        )
-                    }
+                    Text(
+                        text = "Alerta de Vigencia de Matrículas (< 15 días)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = SafetyDanger
+                    )
                 },
                 text = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        // Generador de foto con Random User
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(AquaPrimary.copy(alpha = 0.06f))
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(
-                                model = buzoUiState.nuevaFotoUrl.ifBlank { "https://randomuser.me/api/portraits/men/1.jpg" },
-                                contentDescription = "Foto de perfil",
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(CircleShape)
-                                    .background(AquaPrimary.copy(alpha = 0.15f)),
-                                contentScale = ContentScale.Crop
-                            )
-
-                            Spacer(Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Foto de Perfil (Random User)",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = AquaTextSecondary
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                OutlinedButton(
-                                    onClick = { buzoViewModel.generarFotoAleatoria() },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    enabled = !buzoUiState.cargandoFoto
-                                ) {
-                                    if (buzoUiState.cargandoFoto) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(14.dp),
-                                            strokeWidth = 2.dp,
-                                            color = AquaPrimary
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Cargando...", fontSize = 11.sp)
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Generar otra foto", fontSize = 11.sp)
-                                    }
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = buzoUiState.nuevoNombre,
-                            onValueChange = { buzoViewModel.onNuevoNombreChange(it) },
-                            label = { Text("Nombre y Apellidos *") },
-                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Los siguientes buzos tienen su matrícula DIRECTEMAR próxima a vencer (< 15 días) o vencida:",
+                            fontSize = 12.sp,
+                            color = AquaTextPrimary
                         )
-
-                        OutlinedTextField(
-                            value = buzoUiState.nuevoRut,
-                            onValueChange = { buzoViewModel.onNuevoRutChange(it) },
-                            label = { Text("RUT (ej: 18.234.567-8) *") },
-                            leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Selector de Categoría DIRECTEMAR
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { categoriaDropdownExpanded = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Categoría: ${buzoUiState.nuevaCategoria}", fontSize = 13.sp, color = AquaTextPrimary)
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = categoriaDropdownExpanded,
-                                onDismissRequest = { categoriaDropdownExpanded = false }
-                            ) {
-                                buzoViewModel.categoriasDisponibles.forEach { cat ->
-                                    DropdownMenuItem(
-                                        text = { Text(cat) },
-                                        onClick = {
-                                            buzoViewModel.onNuevaCategoriaChange(cat)
-                                            categoriaDropdownExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = buzoUiState.nuevaMatricula,
-                            onValueChange = { buzoViewModel.onNuevaMatriculaChange(it) },
-                            label = { Text("Matrícula Marítima DIRECTEMAR") },
-                            placeholder = { Text("ej: Matrícula N° 2394") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        OutlinedTextField(
-                            value = buzoUiState.nuevoTelefono,
-                            onValueChange = { buzoViewModel.onNuevoTelefonoChange(it) },
-                            label = { Text("Teléfono de Contacto") },
-                            placeholder = { Text("+56 9 8451 2290") },
-                            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Selector de Empresa
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                OutlinedButton(
-                                    onClick = { empresaDropdownExpanded = true },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Empresa: ${buzoUiState.empresaSeleccionada.take(20)}${if (buzoUiState.empresaSeleccionada.length > 20) "..." else ""}",
-                                            fontSize = 13.sp,
-                                            color = AquaTextPrimary
-                                        )
-                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                                    }
-                                }
-                                DropdownMenu(
-                                    expanded = empresaDropdownExpanded,
-                                    onDismissRequest = { empresaDropdownExpanded = false }
-                                ) {
-                                    buzoUiState.empresasDisponibles.forEach { emp ->
-                                        DropdownMenuItem(
-                                            text = { Text(emp) },
-                                            onClick = {
-                                                buzoViewModel.onEmpresaSeleccionadaChange(emp)
-                                                empresaDropdownExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.width(6.dp))
-                            IconButton(
-                                onClick = { buzoViewModel.openNuevaEmpresaDialog() },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(AquaSecondary.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = "Nueva Empresa", tint = AquaPrimary)
-                            }
-                        }
-
-                        // Selector de Vigencia de Matrícula
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = { vigenciaDropdownExpanded = true },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("Vigencia Matrícula: ${buzoUiState.nuevaVigencia}", fontSize = 13.sp, color = AquaTextPrimary)
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Expandir")
-                                }
-                            }
-                            DropdownMenu(
-                                expanded = vigenciaDropdownExpanded,
-                                onDismissRequest = { vigenciaDropdownExpanded = false }
-                            ) {
-                                buzoViewModel.vigenciasDisponibles.forEach { vig ->
-                                    DropdownMenuItem(
-                                        text = { Text(vig) },
-                                        onClick = {
-                                            buzoViewModel.onNuevaVigenciaChange(vig)
-                                            vigenciaDropdownExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        if (buzoUiState.error != null) {
+                        buzosAlertaCriticaMatricula.forEach { b ->
                             Text(
-                                text = buzoUiState.error ?: "",
-                                color = SafetyDanger,
+                                text = if (b.matriculaVencida) {
+                                    "• ${b.nombre} (${b.matricula}): MATRÍCULA VENCIDA"
+                                } else {
+                                    "• ${b.nombre} (${b.matricula}): Quedan ${b.diasRestantesMatricula} día(s)"
+                                },
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = SafetyDanger
                             )
                         }
                     }
                 },
                 confirmButton = {
                     Button(
-                        onClick = { buzoViewModel.guardarBuzo() },
+                        onClick = { mostrarPopUpMatriculas = false },
                         colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
                     ) {
-                        Text("Guardar Buzo")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { buzoViewModel.closeAddDialog() }) {
-                        Text("Cancelar")
+                        Text("Entendido")
                     }
                 }
             )
         }
 
-        // Diálogo para Registrar Nueva Empresa (desde la pantalla principal)
-        if (buzoUiState.showNuevaEmpresaDialog) {
-            AlertDialog(
-                onDismissRequest = { buzoViewModel.closeNuevaEmpresaDialog() },
-                title = { Text("Nueva Empresa Contratista", fontWeight = FontWeight.Bold, color = AquaPrimary) },
-                text = {
-                    Column {
-                        Text("Ingresa el nombre de la empresa de buceo para añadirla a los registros:", fontSize = 13.sp)
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = buzoUiState.nuevaEmpresaNombre,
-                            onValueChange = { buzoViewModel.onNuevaEmpresaNombreChange(it) },
-                            label = { Text("Nombre de la empresa *") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+        if (mostrarDialogoServidor) {
+            ConfigurarServidorDialog(
+                serverUrl = serverUrl,
+                isConnected = isConnected,
+                servidorOnline = servidorOnline,
+                ultimoPingDetalle = ultimoPingDetalle,
+                pendientesCount = pendientesSync.size,
+                onProbarConexion = { menuViewModel.probarConexionServidor() },
+                onCambiarUrl = { nuevaUrl ->
+                    menuViewModel.cambiarUrlServidor(nuevaUrl)
                 },
-                confirmButton = {
-                    Button(
-                        onClick = { buzoViewModel.guardarNuevaEmpresa() },
-                        colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary)
-                    ) {
-                        Text("Añadir Empresa")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { buzoViewModel.closeNuevaEmpresaDialog() }) {
-                        Text("Cancelar")
-                    }
-                }
+                onAlternarOffline = { menuViewModel.alternarModoOfflineDemo() },
+                onSincronizar = { menuViewModel.sincronizarAhora() },
+                onDismiss = { mostrarDialogoServidor = false }
             )
         }
     }
+}
+
+@Composable
+private fun ConfigurarServidorDialog(
+    serverUrl: String,
+    isConnected: Boolean,
+    servidorOnline: Boolean,
+    ultimoPingDetalle: String,
+    pendientesCount: Int,
+    onProbarConexion: () -> Unit,
+    onCambiarUrl: (String) -> Unit,
+    onAlternarOffline: () -> Unit,
+    onSincronizar: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var urlEditable by remember(serverUrl) { mutableStateOf(serverUrl) }
+
+    val presets = listOf(
+        "Servidor Central HTTPS (4G/5G/Wi-Fi)" to RetrofitClient.URL_AJOLOSERVER_PUBLICA,
+        "Servidor Red Tailscale (100.124.162.2)" to RetrofitClient.URL_AJOLOSERVER_TAILSCALE,
+        "Servidor Wi-Fi Local (192.168.4.143)" to RetrofitClient.URL_AJOLOSERVER_LAN,
+        "Emulador Android Studio (10.0.2.2:8080)" to RetrofitClient.URL_EMULADOR_LOCAL
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Dns,
+                    contentDescription = null,
+                    tint = AquaPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Conexión con el Servidor",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    color = when {
+                        !isConnected -> Color(0xFFFEF3C7)
+                        servidorOnline -> SafetyCardBgSuccess
+                        else -> SafetyCardBgDanger
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = when {
+                                    !isConnected -> Icons.Default.WifiOff
+                                    servidorOnline -> Icons.Default.CloudDone
+                                    else -> Icons.Default.CloudQueue
+                                },
+                                contentDescription = null,
+                                tint = when {
+                                    !isConnected -> Color(0xFFB45309)
+                                    servidorOnline -> SafetySuccess
+                                    else -> SafetyDanger
+                                },
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when {
+                                    !isConnected -> "MODO OFFLINE ACTIVO (ROOM SQLITE)"
+                                    servidorOnline -> "CONECTADO AL SERVIDOR CENTRAL"
+                                    else -> "SERVIDOR EN VERIFICACIÓN / CACHÉ ROOM"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = when {
+                                    !isConnected -> Color(0xFFB45309)
+                                    servidorOnline -> SafetySuccess
+                                    else -> SafetyDanger
+                                }
+                            )
+                        }
+                        Text(
+                            text = ultimoPingDetalle,
+                            fontSize = 11.sp,
+                            color = AquaTextPrimary
+                        )
+                        Text(
+                            text = "Registros en cola local Room pendientes de subir: $pendientesCount",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (pendientesCount > 0) Color(0xFFB45309) else AquaTextSecondary
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Simular Modo Sin Conexión (Offline)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AquaTextPrimary
+                        )
+                        Text(
+                            text = "Guarda en Room SQLite y encola para WorkManager al reconectar",
+                            fontSize = 10.sp,
+                            color = AquaTextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = !isConnected,
+                        onCheckedChange = { onAlternarOffline() }
+                    )
+                }
+
+                HorizontalDivider()
+
+                Text(
+                    text = "Seleccionar Servidor:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AquaTextPrimary
+                )
+
+                presets.forEach { (etiqueta, urlPreset) ->
+                    val seleccionado = urlEditable.equals(urlPreset, ignoreCase = true)
+                    Surface(
+                        color = if (seleccionado) AquaPrimary.copy(alpha = 0.12f) else AquaBackground,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                urlEditable = urlPreset
+                                onCambiarUrl(urlPreset)
+                            }
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                            Text(
+                                text = etiqueta,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (seleccionado) AquaPrimary else AquaTextPrimary
+                            )
+                            Text(
+                                text = urlPreset,
+                                fontSize = 10.sp,
+                                color = AquaTextSecondary
+                            )
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = urlEditable,
+                    onValueChange = { urlEditable = it },
+                    label = { Text("URL Base del Servidor (/api/)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onProbarConexion,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Ping", fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = {
+                            onCambiarUrl(urlEditable)
+                            onSincronizar()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Guardar y Sync", fontSize = 11.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cerrar")
+            }
+        }
+    )
 }
 
 /**

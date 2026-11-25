@@ -27,7 +27,13 @@ data class BuzoEntity(
     val talla: Float? = null,
     val peso: Float? = null,
     val alergias: String? = null,
-    val edadIso: String? = null
+    val edadIso: String? = null,
+    val testEsfuerzoVigente: Boolean = true,
+    val examenPreocupacionalVigente: Boolean = true,
+    val puntajeCalbuco: Int = 90,
+    val certificadoAchsUri: String? = null,
+    val fechaVencimientoMatriculaIso: String? = null,
+    val alertaMatriculaNoInvasiva: Boolean = false
 ) {
     fun toDomain(): Buzo = Buzo(
         id = id,
@@ -49,7 +55,13 @@ data class BuzoEntity(
         talla = talla,
         peso = peso,
         alergias = alergias,
-        edad = edadIso?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        edad = edadIso?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+        testEsfuerzoVigente = testEsfuerzoVigente,
+        examenPreocupacionalVigente = examenPreocupacionalVigente,
+        puntajeCalbuco = puntajeCalbuco,
+        certificadoAchsUri = certificadoAchsUri,
+        fechaVencimientoMatricula = fechaVencimientoMatriculaIso?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+        alertaMatriculaNoInvasiva = alertaMatriculaNoInvasiva
     )
 
     companion object {
@@ -69,7 +81,13 @@ data class BuzoEntity(
             talla = buzo.talla,
             peso = buzo.peso,
             alergias = buzo.alergias,
-            edadIso = buzo.edad?.toString()
+            edadIso = buzo.edad?.toString(),
+            testEsfuerzoVigente = buzo.testEsfuerzoVigente,
+            examenPreocupacionalVigente = buzo.examenPreocupacionalVigente,
+            puntajeCalbuco = buzo.puntajeCalbuco,
+            certificadoAchsUri = buzo.certificadoAchsUri,
+            fechaVencimientoMatriculaIso = buzo.fechaVencimientoMatricula?.toString(),
+            alertaMatriculaNoInvasiva = buzo.alertaMatriculaNoInvasiva
         )
     }
 }

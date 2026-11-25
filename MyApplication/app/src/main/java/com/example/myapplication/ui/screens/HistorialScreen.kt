@@ -23,7 +23,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.myapplication.data.model.BitacoraPostInmersion
 import com.example.myapplication.data.model.CategoriaPendiente
+import com.example.myapplication.data.model.ColorSemaforo
+import com.example.myapplication.data.model.MotivoCierreSinTerminar
 import com.example.myapplication.data.model.Pendiente
 import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.ui.components.AquaScaffold
@@ -121,7 +124,7 @@ fun HistorialScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             val filtrosActuales = if (uiState.selectedTab == 0) {
-                listOf("Todas", "En Curso", "Completada")
+                listOf("Todas", "En Curso", "Completada", "Sin Terminar")
             } else {
                 listOf("Todas", "Aptos", "No Aptos")
             }
@@ -146,6 +149,46 @@ fun HistorialScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             if (uiState.selectedTab == 0) {
+                if (uiState.alertasVelocidad.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = SafetyCardBgDanger)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.WarningAmber,
+                                    contentDescription = null,
+                                    tint = SafetyDanger,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "ALERTAS JEFE DE CENTRO · VELOCIDAD 24/9 m/min (${uiState.alertasVelocidad.size})",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    color = SafetyDanger
+                                )
+                            }
+                            uiState.alertasVelocidad.take(2).forEach { alerta ->
+                                Text(
+                                    text = "• ${alerta.faenaId} (${alerta.buzoNombre}): Descenso ${alerta.velocidadDescensoMpm} m/min / Ascenso ${alerta.velocidadAscensoMpm} m/min · ${alerta.estadoRevision}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SafetyDanger
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 Text(
                     text = "Registros de Bitácora (${uiState.faenasFiltradas.size})",
                     fontWeight = FontWeight.Bold,
@@ -172,10 +215,19 @@ fun HistorialScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(uiState.faenasFiltradas, key = { it.id }) { faena ->
+                            val bitacorasFaena = uiState.bitacorasPostInmersion.filter { it.faenaId == faena.id }
                             FaenaCard(
                                 faena = faena,
+                                semaforo = uiState.semaforoPorFaena[faena.id] ?: ColorSemaforo.AMARILLO,
+                                buzoMatriculaVencida = faena.buzoId in uiState.buzosConMatriculaVencidaIds,
+                                socorristaMatriculaVencida = faena.socorristaId in uiState.buzosConMatriculaVencidaIds,
+                                pendienteSincronizar = faena.id in uiState.pendientesSincronizarIds || !uiState.isNetworkConnected,
                                 cantidadPendientes = uiState.pendientesPorFaena[faena.id]?.size ?: 0,
-                                onRevisar = { viewModel.abrirRevision(faena.id) }
+                                bitacorasPostInmersion = bitacorasFaena,
+                                onRevisar = { viewModel.abrirRevision(faena.id) },
+                                onAbrirBitacoraPost = { viewModel.abrirBitacoraPostInmersion(faena.id) },
+                                onCerrarSinTerminar = { viewModel.abrirCierreSinTerminar(faena.id) },
+                                onEditarComentarioCierre = { viewModel.abrirEditarComentarioCierre(faena.id) }
                             )
                         }
                     }
@@ -214,7 +266,10 @@ fun HistorialScreen(
                                 elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
                             ) {
                                 Box(modifier = Modifier.padding(10.dp)) {
-                                    RegistroMedicoItem(chequeo = chequeo)
+                                    RegistroMedicoItem(
+                                        chequeo = chequeo,
+                                        pendienteSincronizar = chequeo.id in uiState.pendientesSincronizarIds || !uiState.isNetworkConnected
+                                    )
                                 }
                             }
                         }
@@ -227,6 +282,11 @@ fun HistorialScreen(
     uiState.faenaEnRevision?.let { faena ->
         RevisionFaenaDialog(
             faena = faena,
+            semaforo = uiState.semaforoPorFaena[faena.id] ?: ColorSemaforo.AMARILLO,
+            buzoMatriculaVencida = faena.buzoId in uiState.buzosConMatriculaVencidaIds,
+            socorristaMatriculaVencida = faena.socorristaId in uiState.buzosConMatriculaVencidaIds,
+            esSupervisor = uiState.esUsuarioSupervisor,
+            rolEtiqueta = uiState.rolUsuarioEtiqueta,
             pendientes = uiState.pendientesPorFaena[faena.id].orEmpty(),
             novedades = uiState.novedadesPorFaena[faena.id].orEmpty(),
             onEditarDatos = { viewModel.abrirEdicion(faena.id) },
@@ -240,6 +300,7 @@ fun HistorialScreen(
                 viewModel.irASalud(faena.id)
                 navController.navigate(Screen.Salud.route) { launchSingleTop = true }
             },
+            onCerrarSinTerminar = { viewModel.abrirCierreSinTerminar(faena.id) },
             onFinalizar = { viewModel.finalizarFaena(faena.id) },
             onDismiss = { viewModel.cerrarRevision() }
         )
@@ -257,15 +318,75 @@ fun HistorialScreen(
             onDismiss = { viewModel.cerrarEdicion() }
         )
     }
+
+    uiState.faenaBitacoraActiva?.let { faena ->
+        RegistrarBitacoraPostInmersionDialog(
+            faena = faena,
+            bitacorasPrevias = uiState.bitacorasPostInmersion.filter { it.faenaId == faena.id },
+            error = uiState.errorBitacora,
+            onGuardar = { prof, mins, velDesc, velAsc, origen, obs ->
+                viewModel.registrarBitacoraPostInmersion(
+                    faenaId = faena.id,
+                    profundidad = prof,
+                    tiempoFondo = mins,
+                    velocidadDescenso = velDesc,
+                    velocidadAscenso = velAsc,
+                    origenDato = origen,
+                    observaciones = obs
+                )
+            },
+            onDismiss = { viewModel.cerrarBitacoraPostInmersion() }
+        )
+    }
+
+    uiState.faenaCerrandoSinTerminar?.let { faena ->
+        CerrarFaenaSinTerminarDialog(
+            faena = faena,
+            motivosAutomaticos = uiState.motivosAutomaticosCierre,
+            error = uiState.errorCierreSinTerminar,
+            onConfirmar = { motivos, otros, comentario ->
+                viewModel.confirmarCierreSinTerminar(
+                    faenaId = faena.id,
+                    motivosSeleccionados = motivos,
+                    otrosMotivos = otros,
+                    comentario = comentario
+                )
+            },
+            onDismiss = { viewModel.cerrarDialogoSinTerminar() }
+        )
+    }
+
+    uiState.faenaEditandoComentario?.let { faena ->
+        EditarComentarioCierreDialog(
+            faena = faena,
+            onGuardar = { nuevoComentario ->
+                viewModel.guardarComentarioCierre(faena.id, nuevoComentario)
+            },
+            onDismiss = { viewModel.cerrarEditarComentarioCierre() }
+        )
+    }
 }
 
 @Composable
 fun FaenaCard(
     faena: RegistroFaena,
+    semaforo: ColorSemaforo = ColorSemaforo.VERDE,
+    buzoMatriculaVencida: Boolean = false,
+    socorristaMatriculaVencida: Boolean = false,
+    pendienteSincronizar: Boolean = false,
     cantidadPendientes: Int,
-    onRevisar: () -> Unit
+    bitacorasPostInmersion: List<BitacoraPostInmersion> = emptyList(),
+    onRevisar: () -> Unit,
+    onAbrirBitacoraPost: () -> Unit = {},
+    onCerrarSinTerminar: () -> Unit = {},
+    onEditarComentarioCierre: () -> Unit = {}
 ) {
     val enCurso = faena.enCurso
+    val (semColor, semBg) = when (semaforo) {
+        ColorSemaforo.VERDE -> SafetySuccess to SafetyCardBgSuccess
+        ColorSemaforo.AMARILLO -> Color(0xFFD97706) to Color(0xFFFEF3C7)
+        ColorSemaforo.ROJO -> SafetyDanger to SafetyCardBgDanger
+    }
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -290,17 +411,50 @@ fun FaenaCard(
                     color = AquaPrimary
                 )
 
-                Surface(
-                    color = if (enCurso) AquaPrimary.copy(alpha = 0.12f) else SafetyCardBgSuccess,
-                    shape = RoundedCornerShape(10.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = faena.estado,
-                        color = if (enCurso) AquaPrimary else SafetySuccess,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
+                    Surface(
+                        color = semBg,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = when (semaforo) {
+                                    ColorSemaforo.VERDE -> Icons.Default.CheckCircle
+                                    ColorSemaforo.AMARILLO -> Icons.Default.WarningAmber
+                                    ColorSemaforo.ROJO -> Icons.Default.Block
+                                },
+                                contentDescription = null,
+                                tint = semColor,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "Semáforo ${semaforo.codigo}",
+                                color = semColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+
+                    Surface(
+                        color = if (enCurso) AquaPrimary.copy(alpha = 0.12f) else SafetyCardBgSuccess,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            text = faena.estado,
+                            color = if (enCurso) AquaPrimary else SafetySuccess,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
                 }
             }
 
@@ -325,6 +479,46 @@ fun FaenaCard(
                     fontSize = 14.sp,
                     color = AquaTextPrimary
                 )
+            }
+            if (buzoMatriculaVencida) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WarningAmber,
+                        contentDescription = null,
+                        tint = SafetyDanger,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Advertencia (${faena.buzoNombre}): Matrícula marítima vencida",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafetyDanger
+                    )
+                }
+            }
+            if (socorristaMatriculaVencida && faena.socorristaNombre.isNotBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 20.dp, top = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WarningAmber,
+                        contentDescription = null,
+                        tint = SafetyDanger,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Advertencia (${faena.socorristaNombre}): Matrícula marítima vencida",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafetyDanger
+                    )
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -435,18 +629,163 @@ fun FaenaCard(
                             }
                         )
                     }
+                    if (pendienteSincronizar) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Pendiente de sincronizar (Room)",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB45309)
+                            )
+                        }
+                    }
                 }
 
-                if (enCurso) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (enCurso) {
+                        OutlinedButton(
+                            onClick = onRevisar,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetySuccess)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Revisar y finalizar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        OutlinedButton(
+                            onClick = onCerrarSinTerminar,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetyDanger)
+                        ) {
+                            Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Cerrar sin terminar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     OutlinedButton(
-                        onClick = onRevisar,
+                        onClick = onAbrirBitacoraPost,
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetySuccess)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AquaPrimary)
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Revisar y finalizar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("Bitácora Post (24/9)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
+            if (faena.cierreSinTerminar != null) {
+                val cierre = faena.cierreSinTerminar
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = SafetyCardBgDanger,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Cancel,
+                                    contentDescription = null,
+                                    tint = SafetyDanger,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Faena cerrada sin terminar",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SafetyDanger
+                                )
+                            }
+                            TextButton(
+                                onClick = onEditarComentarioCierre,
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = AquaPrimary)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Editar comentario", fontSize = 11.sp, color = AquaPrimary)
+                            }
+                        }
+                        Text(
+                            text = "Motivos: ${cierre.resumenMotivos()}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AquaTextPrimary
+                        )
+                        Text(
+                            text = "Comentario: ${cierre.comentario.ifBlank { "Sin comentario adicional" }}",
+                            fontSize = 11.sp,
+                            color = AquaTextSecondary
+                        )
+                        Text(
+                            text = "Cerrada por: ${cierre.cerradoPor} · ${cierre.fechaHora}",
+                            fontSize = 10.sp,
+                            color = AquaTextSecondary
+                        )
+                    }
+                }
+            }
+
+            if (bitacorasPostInmersion.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                bitacorasPostInmersion.forEach { bit ->
+                    Surface(
+                        color = if (bit.alertaVelocidadSuperada) SafetyCardBgDanger else SafetyCardBgSuccess,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (bit.alertaVelocidadSuperada) Icons.Default.WarningAmber else Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = if (bit.alertaVelocidadSuperada) SafetyDanger else SafetySuccess,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "${bit.id} · Descenso: ${bit.velocidadDescensoMpm} m/min · Ascenso: ${bit.velocidadAscensoMpm} m/min",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (bit.alertaVelocidadSuperada) SafetyDanger else SafetySuccess
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "${bit.detalleAlerta} · Origen: ${bit.origenDato} · ${bit.estadoRevision}",
+                                fontSize = 10.sp,
+                                color = if (bit.alertaVelocidadSuperada) SafetyDanger else AquaTextSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -457,6 +796,11 @@ fun FaenaCard(
 @Composable
 fun RevisionFaenaDialog(
     faena: RegistroFaena,
+    semaforo: ColorSemaforo = ColorSemaforo.AMARILLO,
+    buzoMatriculaVencida: Boolean = false,
+    socorristaMatriculaVencida: Boolean = false,
+    esSupervisor: Boolean = true,
+    rolEtiqueta: String = "Supervisor / Prevencionista SEREMI",
     pendientes: List<Pendiente>,
     novedades: List<String>,
     onEditarDatos: () -> Unit,
@@ -464,21 +808,56 @@ fun RevisionFaenaDialog(
     onRevocarAprobacion: () -> Unit,
     onIrAEquipos: () -> Unit,
     onIrASalud: () -> Unit,
+    onCerrarSinTerminar: () -> Unit = {},
     onFinalizar: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val aprobacion = faena.aprobacion
     val hayPendientesEquipos = pendientes.any { it.categoria == CategoriaPendiente.EQUIPOS }
     val hayPendientesSalud = pendientes.any { it.categoria == CategoriaPendiente.SALUD }
+    val (semColor, semBg) = when (semaforo) {
+        ColorSemaforo.VERDE -> SafetySuccess to SafetyCardBgSuccess
+        ColorSemaforo.AMARILLO -> Color(0xFFD97706) to Color(0xFFFEF3C7)
+        ColorSemaforo.ROJO -> SafetyDanger to SafetyCardBgDanger
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "Revisión de inmersión ${faena.id}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Revisión de inmersión ${faena.id}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+                Surface(
+                    color = semBg,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = when (semaforo) {
+                                ColorSemaforo.VERDE -> Icons.Default.VerifiedUser
+                                ColorSemaforo.AMARILLO -> Icons.Default.WarningAmber
+                                ColorSemaforo.ROJO -> Icons.Default.Block
+                            },
+                            contentDescription = null,
+                            tint = semColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = semaforo.etiqueta,
+                            color = semColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
+            }
         },
         text = {
             Column(
@@ -493,10 +872,26 @@ fun RevisionFaenaDialog(
                     color = AquaTextPrimary
                 )
                 DatoFila("Buzo ejecutor", faena.buzoNombre)
+                if (buzoMatriculaVencida) {
+                    Text(
+                        text = "Advertencia: Matrícula marítima vencida (${faena.buzoNombre})",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafetyDanger
+                    )
+                }
                 DatoFila(
                     "Socorrista",
                     faena.socorristaNombre.takeIf { it.isNotBlank() } ?: "Sin asignar"
                 )
+                if (socorristaMatriculaVencida && faena.socorristaNombre.isNotBlank()) {
+                    Text(
+                        text = "Advertencia: Matrícula marítima vencida (${faena.socorristaNombre})",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SafetyDanger
+                    )
+                }
                 DatoFila("Empresa", faena.empresa)
                 DatoFila("Centro", faena.centroCultivo)
                 DatoFila("Faena", faena.tipoFaena)
@@ -539,6 +934,33 @@ fun RevisionFaenaDialog(
                     }
                 }
 
+                if (!esSupervisor) {
+                    Surface(
+                        color = SafetyCardBgDanger,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = SafetyDanger,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Restricción por Rol ($rolEtiqueta): Solo un Supervisor puede aprobar o cerrar la faena.",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SafetyDanger
+                            )
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -556,6 +978,7 @@ fun RevisionFaenaDialog(
                     if (aprobacion == null) {
                         Button(
                             onClick = onAprobarDatos,
+                            enabled = esSupervisor,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
@@ -565,6 +988,7 @@ fun RevisionFaenaDialog(
                     } else {
                         OutlinedButton(
                             onClick = onRevocarAprobacion,
+                            enabled = esSupervisor,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
@@ -649,11 +1073,23 @@ fun RevisionFaenaDialog(
                         Text(text = "• $novedad", fontSize = 12.sp, color = AquaTextSecondary)
                     }
                 }
+
+                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+                OutlinedButton(
+                    onClick = onCerrarSinTerminar,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetyDanger)
+                ) {
+                    Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Cerrar faena sin terminar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         },
         confirmButton = {
-            Button(onClick = onFinalizar, enabled = pendientes.isEmpty()) {
-                Text("Finalizar faena")
+            Button(onClick = onFinalizar, enabled = pendientes.isEmpty() && esSupervisor) {
+                Text(if (esSupervisor) "Finalizar faena" else "Requiere Supervisor")
             }
         },
         dismissButton = {
@@ -757,6 +1193,409 @@ fun EditarDatosFaenaDialog(
         confirmButton = {
             Button(onClick = { onGuardar(centro, tipo, profundidad, minutos) }) {
                 Text("Guardar cambios")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+fun RegistrarBitacoraPostInmersionDialog(
+    faena: RegistroFaena,
+    bitacorasPrevias: List<BitacoraPostInmersion>,
+    error: String?,
+    onGuardar: (
+        profundidad: String,
+        tiempoFondo: String,
+        velocidadDescenso: String,
+        velocidadAscenso: String,
+        origenDato: String,
+        observaciones: String
+    ) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var profundidad by remember(faena.id) { mutableStateOf(faena.profundidadMetros.toString()) }
+    var tiempoFondo by remember(faena.id) { mutableStateOf(faena.tiempoMinutos.toString()) }
+    var velocidadDescenso by remember(faena.id) { mutableStateOf("18.0") }
+    var velocidadAscenso by remember(faena.id) { mutableStateOf("8.0") }
+    var origenDato by remember(faena.id) { mutableStateOf("Dispositivo Census / Simulación") }
+    var observaciones by remember(faena.id) { mutableStateOf("") }
+
+    val descVal = velocidadDescenso.replace(',', '.').toDoubleOrNull() ?: 0.0
+    val ascVal = velocidadAscenso.replace(',', '.').toDoubleOrNull() ?: 0.0
+    val superaDesc = descVal > BitacoraPostInmersion.LIMITE_DESCENSO_MPM
+    val superaAsc = ascVal > BitacoraPostInmersion.LIMITE_ASCENSO_MPM
+    val hayAlerta = superaDesc || superaAsc
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Speed,
+                    contentDescription = null,
+                    tint = if (hayAlerta) SafetyDanger else AquaPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Bitácora Post-Inmersión · ${faena.id}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = if (hayAlerta) SafetyDanger else AquaPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Buzo: ${faena.buzoNombre} · Límites normativos: Descenso máx. 24 m/min | Ascenso máx. 9 m/min",
+                    fontSize = 12.sp,
+                    color = AquaTextSecondary
+                )
+
+                Surface(
+                    color = if (hayAlerta) SafetyCardBgDanger else SafetyCardBgSuccess,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (hayAlerta) Icons.Default.WarningAmber else Icons.Default.VerifiedUser,
+                            contentDescription = null,
+                            tint = if (hayAlerta) SafetyDanger else SafetySuccess,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when {
+                                superaDesc && superaAsc ->
+                                    "ALERTA JEFE DE CENTRO: Velocidad de descenso ($descVal > 24 m/min) y ascenso ($ascVal > 9 m/min) excedidas."
+                                superaDesc ->
+                                    "ALERTA JEFE DE CENTRO: Velocidad de descenso ($descVal m/min) supera el límite de 24 m/min."
+                                superaAsc ->
+                                    "ALERTA JEFE DE CENTRO: Velocidad de ascenso ($ascVal m/min) supera el límite de 9 m/min."
+                                else ->
+                                    "Velocidades dentro de rango seguro (<= 24 m/min descenso y <= 9 m/min ascenso)."
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (hayAlerta) SafetyDanger else SafetySuccess
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = profundidad,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) profundidad = it },
+                        label = { Text("Profundidad (m)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    OutlinedTextField(
+                        value = tiempoFondo,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) tiempoFondo = it },
+                        label = { Text("Tiempo fondo (min)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = velocidadDescenso,
+                        onValueChange = { velocidadDescenso = it },
+                        label = { Text("Descenso (m/min)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        isError = superaDesc,
+                        supportingText = { Text(if (superaDesc) "> 24 m/min: ALERTA" else "Máx: 24 m/min") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    OutlinedTextField(
+                        value = velocidadAscenso,
+                        onValueChange = { velocidadAscenso = it },
+                        label = { Text("Ascenso (m/min)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        isError = superaAsc,
+                        supportingText = { Text(if (superaAsc) "> 9 m/min: ALERTA" else "Máx: 9 m/min") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = origenDato,
+                    onValueChange = { origenDato = it },
+                    label = { Text("Origen del dato (Census / Simulación)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = observaciones,
+                    onValueChange = { observaciones = it },
+                    label = { Text("Observaciones post-inmersión") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 3
+                )
+
+                if (bitacorasPrevias.isNotEmpty()) {
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+                    Text(
+                        text = "Registros históricos de esta faena (${bitacorasPrevias.size}):",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AquaTextPrimary
+                    )
+                    bitacorasPrevias.forEach { bit ->
+                        Text(
+                            text = "• ${bit.id} (${bit.fechaHora}): Desc ${bit.velocidadDescensoMpm} / Asc ${bit.velocidadAscensoMpm} m/min — ${bit.estadoRevision}",
+                            fontSize = 11.sp,
+                            color = if (bit.alertaVelocidadSuperada) SafetyDanger else AquaTextSecondary
+                        )
+                    }
+                }
+
+                if (error != null) {
+                    Text(
+                        text = error,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SafetyDanger
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onGuardar(profundidad, tiempoFondo, velocidadDescenso, velocidadAscenso, origenDato, observaciones)
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (hayAlerta) SafetyDanger else AquaPrimary
+                )
+            ) {
+                Text(if (hayAlerta) "Registrar y Notificar Alerta" else "Guardar Bitácora")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+fun CerrarFaenaSinTerminarDialog(
+    faena: RegistroFaena,
+    motivosAutomaticos: Set<MotivoCierreSinTerminar>,
+    error: String?,
+    onConfirmar: (
+        motivosSeleccionados: Set<MotivoCierreSinTerminar>,
+        otrosMotivos: List<String>,
+        comentario: String
+    ) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var seleccionados by remember(faena.id, motivosAutomaticos) {
+        mutableStateOf(motivosAutomaticos)
+    }
+    var otrosMotivos by remember(faena.id) { mutableStateOf(listOf("")) }
+    var comentario by remember(faena.id) { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Cancel,
+                    contentDescription = null,
+                    tint = SafetyDanger,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Cerrar Faena sin Terminar · ${faena.id}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = SafetyDanger
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "¿Por qué se cierra la faena sin terminar? (Puede marcar más de una opción):",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AquaTextPrimary
+                )
+
+                MotivoCierreSinTerminar.entries.forEach { motivo ->
+                    val esAutomatico = motivo in motivosAutomaticos
+                    val estaMarcado = motivo in seleccionados || esAutomatico
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = estaMarcado,
+                            onCheckedChange = { checked ->
+                                if (!esAutomatico) {
+                                    seleccionados = if (checked) seleccionados + motivo else seleccionados - motivo
+                                }
+                            },
+                            enabled = !esAutomatico
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = motivo.etiqueta,
+                                fontSize = 13.sp,
+                                fontWeight = if (estaMarcado) FontWeight.Bold else FontWeight.Normal,
+                                color = if (esAutomatico) SafetyDanger else AquaTextPrimary
+                            )
+                            if (esAutomatico) {
+                                Text(
+                                    text = "Marcado automático por estado de equipos/salud en la faena",
+                                    fontSize = 10.sp,
+                                    color = SafetyDanger
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (MotivoCierreSinTerminar.OTRO in seleccionados) {
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+                    Text(
+                        text = "Especifique otro(s) motivo(s) no considerado(s):",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AquaPrimary
+                    )
+                    otrosMotivos.forEachIndexed { idx, texto ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = texto,
+                                onValueChange = { nuevo ->
+                                    otrosMotivos = otrosMotivos.toMutableList().also { it[idx] = nuevo }
+                                },
+                                label = { Text("Otro motivo #${idx + 1}") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (otrosMotivos.size > 1) {
+                                IconButton(
+                                    onClick = {
+                                        otrosMotivos = otrosMotivos.filterIndexed { i, _ -> i != idx }
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Quitar motivo", tint = SafetyDanger)
+                                }
+                            }
+                        }
+                    }
+                    TextButton(
+                        onClick = { otrosMotivos = otrosMotivos + "" }
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Agregar otra opción en 'Otro'", fontSize = 12.sp)
+                    }
+                }
+
+                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
+                OutlinedTextField(
+                    value = comentario,
+                    onValueChange = { comentario = it },
+                    label = { Text("Comentario de cierre (editable incluso tras cerrar)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4
+                )
+
+                if (error != null) {
+                    Text(
+                        text = error,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SafetyDanger
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirmar(seleccionados, otrosMotivos, comentario) },
+                colors = ButtonDefaults.buttonColors(containerColor = SafetyDanger)
+            ) {
+                Text("Confirmar Cierre sin Terminar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+fun EditarComentarioCierreDialog(
+    faena: RegistroFaena,
+    onGuardar: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var comentario by remember(faena.id) {
+        mutableStateOf(faena.cierreSinTerminar?.comentario.orEmpty())
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Editar comentario de cierre · ${faena.id}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Motivos registrados: ${faena.cierreSinTerminar?.resumenMotivos().orEmpty()}",
+                    fontSize = 12.sp,
+                    color = AquaTextSecondary
+                )
+                OutlinedTextField(
+                    value = comentario,
+                    onValueChange = { comentario = it },
+                    label = { Text("Comentario de cierre") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    maxLines = 4
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onGuardar(comentario) }) {
+                Text("Guardar comentario")
             }
         },
         dismissButton = {

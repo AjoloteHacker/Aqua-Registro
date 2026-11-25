@@ -36,10 +36,12 @@ data class RegistroFaena(
     val fechaHora: String,
     val estado: String = ESTADO_EN_CURSO,
     val autorizadoPor: String = "Cristóbal Loncón C. (Prevencionista)",
-    val aprobacion: AprobacionDatos? = null
+    val aprobacion: AprobacionDatos? = null,
+    val cierreSinTerminar: CierreSinTerminar? = null
 ) {
     val enCurso: Boolean get() = estado.contains("Curso", ignoreCase = true)
     val completada: Boolean get() = estado.contains("Completada", ignoreCase = true)
+    val cerradaSinTerminar: Boolean get() = estado.contains("sin Terminar", ignoreCase = true) || cierreSinTerminar != null
     val datosAprobados: Boolean get() = aprobacion != null
     val socorristaAsignado: Boolean get() = socorristaId.isNotBlank() && socorristaNombre.isNotBlank()
 
@@ -90,6 +92,14 @@ data class RegistroFaena(
                         "${asignacion.rol.etiqueta}: ${asignacion.buzoNombre} no encontrado en el sistema"
                     )
                 )
+            } else if (avanceBuzo.buzo.bloqueadoPorEdadSinTestEsfuerzo) {
+                faltantes.add(
+                    Pendiente(
+                        CategoriaPendiente.SALUD,
+                        "BLOQUEO CRÍTICO (${asignacion.rol.etiqueta}): ${avanceBuzo.buzo.nombre} tiene " +
+                            "${avanceBuzo.buzo.edadAnios} años (>45) sin Test de Esfuerzo vigente"
+                    )
+                )
             }
             faltantes.addAll(pendientesEquipos(asignacion.rol, avanceBuzo))
         }
@@ -100,8 +110,17 @@ data class RegistroFaena(
                 Pendiente(CategoriaPendiente.SALUD, "Encuesta de salud ANTES: sin registrar")
             )
         } else if (!antes.esApto) {
+            val detalleMotivo = antes.motivosBloqueo.firstOrNull()
+                ?: "Encuesta de salud ANTES: ${tripulacion()} resultó NO APTO"
             faltantes.add(
-                Pendiente(CategoriaPendiente.SALUD, "Encuesta de salud ANTES: ${tripulacion()} resultó NO APTO")
+                Pendiente(
+                    CategoriaPendiente.SALUD,
+                    if (detalleMotivo.contains("NO APTO") || detalleMotivo.contains("Encuesta")) {
+                        detalleMotivo
+                    } else {
+                        "Encuesta de salud ANTES (NO APTO): $detalleMotivo"
+                    }
+                )
             )
         }
 
@@ -118,7 +137,7 @@ data class RegistroFaena(
     private fun pendientesEquipos(rol: RolBuzo, avanceBuzo: AvanceBuzo): List<Pendiente> {
         val faltantes = mutableListOf<Pendiente>()
 
-        // La evaluación individual es compartida entre etapas: se informa una sola vez.
+        // La evaluación individual es compartida entre etapas: basta con al menos 2 equipos evaluados (o todos si la lista tiene <= 2).
         val equipos = avanceBuzo.etapas[EtapaComprobacion.PRE_EQUIPACION].orEmpty()
         if (equipos.isEmpty()) {
             faltantes.add(
@@ -128,17 +147,30 @@ data class RegistroFaena(
                 )
             )
         } else {
-            val sinEstado = equipos.count { !it.tieneEstado }
+            val minRequeridos = minOf(2, equipos.size)
+            val evaluados = equipos.count { it.evaluacionCompleta }
             val sinDescripcion = equipos.count { it.faltaDescripcion }
-            val detalle = listOfNotNull(
-                "$sinEstado sin revisar".takeIf { sinEstado > 0 },
-                "$sinDescripcion sin descripción".takeIf { sinDescripcion > 0 }
-            )
+            val detalle = buildList {
+                if (evaluados < minRequeridos) {
+                    val sinEstado = equipos.count { !it.tieneEstado }
+                    if (sinEstado > 0) add("$sinEstado sin revisar (mínimo $minRequeridos requeridos)")
+                }
+                if (sinDescripcion > 0) add("$sinDescripcion sin descripción")
+            }
             if (detalle.isNotEmpty()) {
                 faltantes.add(
                     Pendiente(
                         CategoriaPendiente.EQUIPOS,
                         "${rol.etiqueta}: evaluación individual: ${detalle.joinToString(", ")}"
+                    )
+                )
+            }
+            val inutilizables = equipos.filter { it.estado == EstadoEquipo.INUTILIZABLE }
+            if (inutilizables.isNotEmpty()) {
+                faltantes.add(
+                    Pendiente(
+                        CategoriaPendiente.EQUIPOS,
+                        "${rol.etiqueta}: BLOQUEO por equipo(s) en «No cumple» / Inutilizable (${inutilizables.joinToString { it.nombre }})"
                     )
                 )
             }
@@ -193,10 +225,50 @@ data class RegistroFaena(
 
     fun puedeFinalizar(avance: AvanceFaena): Boolean = pendientes(avance).isEmpty()
 
+    /**
+     * Calcula el estado del Semáforo Industrial (VERDE / AMARILLO / ROJO) para la faena:
+     * - ROJO: Existe un bloqueo crítico (buzo >45 años sin test de esfuerzo, encuesta ANTES en NO APTO,
+     *         o algún equipo marcado como INUTILIZABLE / «No cumple»).
+     * - AMARILLO: Sin bloqueos críticos, pero aún hay verificaciones pendientes o novedades/advertencias
+     *             (equipos riesgosos, puntaje Calbuco/IMC en observación o encuesta DESPUÉS no apta).
+     * - VERDE: Todos los requisitos completos, aprobados y sin alertas críticas.
+     */
+    fun semaforo(avance: AvanceFaena): ColorSemaforo {
+        val hayBuzoMayor45SinTest = asignaciones().any { asig ->
+            avance.buzos[asig.buzoId]?.buzo?.bloqueadoPorEdadSinTestEsfuerzo == true
+        }
+        val hayEquipoInutilizable = asignaciones().any { asig ->
+            avance.buzos[asig.buzoId]
+                ?.etapas
+                ?.get(EtapaComprobacion.PRE_EQUIPACION)
+                .orEmpty()
+                .any { it.estado == EstadoEquipo.INUTILIZABLE }
+        }
+        val encuestaAntes = avance.encuestas[MomentoSalud.ANTES]
+        val haySaludCritica = encuestaAntes != null && (!encuestaAntes.esApto || encuestaAntes.semaforo == ColorSemaforo.ROJO)
+
+        if (hayBuzoMayor45SinTest || hayEquipoInutilizable || haySaludCritica) {
+            return ColorSemaforo.ROJO
+        }
+
+        val tieneObservaciones = pendientes(avance).isNotEmpty() ||
+            novedades(avance).isNotEmpty() ||
+            encuestaAntes?.semaforo == ColorSemaforo.AMARILLO ||
+            asignaciones().any { asig ->
+                val b = avance.buzos[asig.buzoId]?.buzo
+                b != null && (b.puntajeCalbuco < 70 || (b.imc != null && (b.imc!! < 19.0 || b.imc!! > 30.0)))
+            }
+
+        return if (tieneObservaciones) ColorSemaforo.AMARILLO else ColorSemaforo.VERDE
+    }
+
     /** Devuelve la faena completada, o falla con [FaenaIncompletaException] si falta algo. */
     fun finalizar(avance: AvanceFaena): Result<RegistroFaena> {
         if (completada) {
             return Result.failure(IllegalStateException("La faena $id ya está completada."))
+        }
+        if (cerradaSinTerminar) {
+            return Result.failure(IllegalStateException("La faena $id ya fue cerrada sin terminar."))
         }
         val faltantes = pendientes(avance)
         return if (faltantes.isEmpty()) {
@@ -204,6 +276,81 @@ data class RegistroFaena(
         } else {
             Result.failure(FaenaIncompletaException(id, faltantes))
         }
+    }
+
+    /**
+     * Calcula qué motivos de cierre anticipado deben marcarse en automático según el estado
+     * actual de la faena:
+     * - [MotivoCierreSinTerminar.EQUIPO_MAL_ESTADO]: si algún equipo está en INUTILIZABLE o no coincide con línea base.
+     * - [MotivoCierreSinTerminar.BUZOS_ENFERMOS]: si algún buzo está en NO_APTO, bloqueado (>45 sin test) o la encuesta dio NO APTO.
+     */
+    fun motivosAutomaticosCierre(avance: AvanceFaena): Set<MotivoCierreSinTerminar> = buildSet {
+        val hayEquipoInutilizable = asignaciones().any { asig ->
+            avance.buzos[asig.buzoId]
+                ?.etapas
+                ?.get(EtapaComprobacion.PRE_EQUIPACION)
+                .orEmpty()
+                .any { it.estado == EstadoEquipo.INUTILIZABLE || !it.coincideConLineaBase }
+        }
+        if (hayEquipoInutilizable) {
+            add(MotivoCierreSinTerminar.EQUIPO_MAL_ESTADO)
+        }
+
+        val hayBuzoNoApto = avance.encuestas.values.any { !it.esApto } ||
+            asignaciones().any { asig ->
+                val b = avance.buzos[asig.buzoId]?.buzo
+                b != null && (b.estadoSalud == EstadoSalud.NO_APTO || b.bloqueadoPorEdadSinTestEsfuerzo)
+            }
+        if (hayBuzoNoApto) {
+            add(MotivoCierreSinTerminar.BUZOS_ENFERMOS)
+        }
+    }
+
+    /**
+     * Cierra la faena anticipadamente (sin terminar) con selección múltiple de motivos,
+     * aplicando el marcado automático de las 2 primeras opciones cuando corresponda y
+     * permitiendo listar múltiples opciones en «Otro» más un comentario editable post-cierre.
+     */
+    fun cerrarSinTerminar(
+        motivosSeleccionados: Set<MotivoCierreSinTerminar>,
+        otrosMotivos: List<String>,
+        comentario: String,
+        cerradoPor: String,
+        fechaHora: String,
+        avance: AvanceFaena
+    ): Result<RegistroFaena> {
+        if (!enCurso) {
+            return Result.failure(IllegalStateException("La faena $id ya no está en curso."))
+        }
+        val motivosFinales = motivosSeleccionados + motivosAutomaticosCierre(avance)
+        if (motivosFinales.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Seleccione al menos un motivo por el cual se cierra la faena sin terminar."))
+        }
+        val otrosLimpios = otrosMotivos.map { it.trim() }.filter { it.isNotBlank() }
+        if (MotivoCierreSinTerminar.OTRO in motivosFinales && otrosLimpios.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Al elegir 'Otro', debe especificar al menos un motivo adicional."))
+        }
+        return Result.success(
+            copy(
+                estado = ESTADO_SIN_TERMINAR,
+                cierreSinTerminar = CierreSinTerminar(
+                    motivos = motivosFinales,
+                    otrosMotivos = if (MotivoCierreSinTerminar.OTRO in motivosFinales) otrosLimpios else emptyList(),
+                    comentario = comentario.trim(),
+                    cerradoPor = cerradoPor,
+                    fechaHora = fechaHora
+                )
+            )
+        )
+    }
+
+    /** Permite modificar el comentario de una faena cerrada sin terminar incluso después de su cierre. */
+    fun actualizarComentarioCierre(nuevoComentario: String): Result<RegistroFaena> {
+        val actual = cierreSinTerminar
+            ?: return Result.failure(IllegalStateException("La faena $id no tiene un registro de cierre sin terminar."))
+        return Result.success(
+            copy(cierreSinTerminar = actual.copy(comentario = nuevoComentario.trim()))
+        )
     }
 
     // ───────────────────────── Encuesta de salud ─────────────────────────
@@ -276,6 +423,40 @@ data class RegistroFaena(
     companion object {
         const val ESTADO_EN_CURSO = "Autorizada y en Curso"
         const val ESTADO_COMPLETADA = "Completada con Éxito"
+        const val ESTADO_SIN_TERMINAR = "Cerrada sin Terminar"
+    }
+}
+
+/** Motivos de selección múltiple para cerrar una faena sin terminar (docs/nota_3). */
+enum class MotivoCierreSinTerminar(val etiqueta: String) {
+    EQUIPO_MAL_ESTADO("Equipo en mal estado"),
+    BUZOS_ENFERMOS("Buzos enfermos"),
+    ACCIDENTE_BUZO("Accidente de buzo"),
+    PREVENCIONISTA_ENFERMO("Prevencionista enfermo"),
+    MAL_TIEMPO("Mal tiempo"),
+    OTRO("Otro")
+}
+
+/** Detalle de cierre anticipado de una faena sin terminar, con comentario editable post-cierre. */
+data class CierreSinTerminar(
+    val motivos: Set<MotivoCierreSinTerminar>,
+    val otrosMotivos: List<String> = emptyList(),
+    val comentario: String = "",
+    val cerradoPor: String = "",
+    val fechaHora: String = ""
+) {
+    fun resumenMotivos(): String {
+        val base = motivos
+            .filter { it != MotivoCierreSinTerminar.OTRO }
+            .map { it.etiqueta }
+        val otros = if (MotivoCierreSinTerminar.OTRO in motivos && otrosMotivos.isNotEmpty()) {
+            listOf("Otro: ${otrosMotivos.joinToString(", ")}")
+        } else if (MotivoCierreSinTerminar.OTRO in motivos) {
+            listOf("Otro")
+        } else {
+            emptyList()
+        }
+        return (base + otros).joinToString(" · ")
     }
 }
 
@@ -328,3 +509,57 @@ class FaenaIncompletaException(
 ) : IllegalStateException(
     "La faena $faenaId tiene ${pendientes.size} pendiente(s) y no puede finalizarse."
 )
+
+/**
+ * Bitácora post-inmersión y trazabilidad de velocidades de descenso/ascenso (Anexo C EA4 / EA5).
+ * Alerta automáticamente al jefe de centro ante velocidades de descenso > 24 m/min o ascenso > 9 m/min.
+ */
+data class BitacoraPostInmersion(
+    val id: String,
+    val faenaId: String,
+    val buzoId: String,
+    val buzoNombre: String,
+    val fechaHora: String,
+    val profundidadMetros: Int,
+    val tiempoFondoMinutos: Int,
+    val velocidadDescensoMpm: Double,
+    val velocidadAscensoMpm: Double,
+    val origenDato: String = "Dispositivo Census / Simulación",
+    val observaciones: String = "",
+    val registradoPor: String = "Cristóbal Loncón C."
+) {
+    val superaDescenso: Boolean get() = velocidadDescensoMpm > LIMITE_DESCENSO_MPM
+    val superaAscenso: Boolean get() = velocidadAscensoMpm > LIMITE_ASCENSO_MPM
+    val alertaVelocidadSuperada: Boolean get() = superaDescenso || superaAscenso
+    val estadoRevision: String
+        get() = if (alertaVelocidadSuperada) {
+            "ALERTA NOTIFICADA A JEFE DE CENTRO"
+        } else {
+            "CONFORME"
+        }
+
+    val detalleAlerta: String
+        get() = buildList {
+            if (superaDescenso) {
+                add(
+                    "ALERTA CRÍTICA JEFE DE CENTRO: Velocidad de descenso excesiva " +
+                        "($velocidadDescensoMpm m/min > límite de $LIMITE_DESCENSO_MPM m/min). Riesgo de barotrauma."
+                )
+            }
+            if (superaAscenso) {
+                add(
+                    "ALERTA CRÍTICA JEFE DE CENTRO: Velocidad de ascenso excesiva " +
+                        "($velocidadAscensoMpm m/min > límite de $LIMITE_ASCENSO_MPM m/min). Riesgo de enfermedad descompresiva."
+                )
+            }
+        }.ifEmpty {
+            listOf(
+                "Parámetros de descenso ($velocidadDescensoMpm m/min) y ascenso ($velocidadAscensoMpm m/min) dentro de norma."
+            )
+        }.joinToString(" | ")
+
+    companion object {
+        const val LIMITE_DESCENSO_MPM = 24.0
+        const val LIMITE_ASCENSO_MPM = 9.0
+    }
+}

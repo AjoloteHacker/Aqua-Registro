@@ -13,14 +13,25 @@ import com.example.myapplication.data.local.dao.FaenaDao
 import com.example.myapplication.data.local.entity.BuzoEntity
 import com.example.myapplication.data.local.entity.ChequeoEntity
 import com.example.myapplication.data.local.entity.EmpresaEntity
+import com.example.myapplication.data.local.entity.EncuestaSaludEntity
+import com.example.myapplication.data.local.entity.EvidenciaEtapaEntity
 import com.example.myapplication.data.local.entity.FaenaEntity
+import com.example.myapplication.data.local.entity.RevisionEquipoEntity
 
 /**
  * Base de datos principal de Room (SQLite) para Aqua-Registro.
  */
 @Database(
-    entities = [BuzoEntity::class, FaenaEntity::class, EmpresaEntity::class, ChequeoEntity::class],
-    version = 6,
+    entities = [
+        BuzoEntity::class,
+        FaenaEntity::class,
+        EmpresaEntity::class,
+        ChequeoEntity::class,
+        RevisionEquipoEntity::class,
+        EvidenciaEtapaEntity::class,
+        EncuestaSaludEntity::class
+    ],
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -93,6 +104,84 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Parámetros de validación cruzada de semáforo en ficha de buzo (EA4 / EA5). */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `buzos` ADD COLUMN `testEsfuerzoVigente` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `buzos` ADD COLUMN `examenPreocupacionalVigente` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `buzos` ADD COLUMN `puntajeCalbuco` INTEGER NOT NULL DEFAULT 90")
+            }
+        }
+
+        /** Persistencia offline en Room de revisiones de equipos, evidencias fotográficas y encuestas de faena. */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `buzos` ADD COLUMN `certificadoAchsUri` TEXT")
+                db.execSQL("ALTER TABLE `buzos` ADD COLUMN `fechaVencimientoMatriculaIso` TEXT")
+                db.execSQL("ALTER TABLE `buzos` ADD COLUMN `alertaMatriculaNoInvasiva` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `faenas` ADD COLUMN `cierreMotivos` TEXT")
+                db.execSQL("ALTER TABLE `faenas` ADD COLUMN `cierreOtros` TEXT")
+                db.execSQL("ALTER TABLE `faenas` ADD COLUMN `cierreComentario` TEXT")
+                db.execSQL("ALTER TABLE `faenas` ADD COLUMN `cierrePor` TEXT")
+                db.execSQL("ALTER TABLE `faenas` ADD COLUMN `cierreFechaHora` TEXT")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `revisiones_equipo` (
+                        `id` TEXT NOT NULL,
+                        `faenaId` TEXT NOT NULL,
+                        `buzoId` TEXT NOT NULL,
+                        `equipoId` TEXT NOT NULL,
+                        `categoria` TEXT NOT NULL,
+                        `nombre` TEXT NOT NULL,
+                        `descripcionUso` TEXT NOT NULL,
+                        `estado` TEXT NOT NULL,
+                        `descripcionEstado` TEXT NOT NULL,
+                        `registradoEn` INTEGER,
+                        `fotoActualUri` TEXT,
+                        `fotoLineaBaseRef` TEXT NOT NULL,
+                        `coincideConLineaBase` INTEGER NOT NULL,
+                        `observacionLineaBase` TEXT NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `evidencias_etapa` (
+                        `id` TEXT NOT NULL,
+                        `faenaId` TEXT NOT NULL,
+                        `buzoId` TEXT NOT NULL,
+                        `etapa` TEXT NOT NULL,
+                        `fotoGeneralUri` TEXT,
+                        `fotoFrenteUri` TEXT,
+                        `fotoAtrasUri` TEXT,
+                        `etapaConfirmada` INTEGER NOT NULL,
+                        `registradoEn` INTEGER,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `encuestas_salud` (
+                        `id` TEXT NOT NULL,
+                        `faenaId` TEXT NOT NULL,
+                        `momento` TEXT NOT NULL,
+                        `esApto` INTEGER NOT NULL,
+                        `presionArterial` TEXT NOT NULL,
+                        `frecuenciaCardiaca` INTEGER NOT NULL,
+                        `registradaPor` TEXT NOT NULL,
+                        `registradaEn` TEXT NOT NULL,
+                        `semaforo` TEXT NOT NULL,
+                        `motivosBloqueoText` TEXT NOT NULL,
+                        `advertenciasText` TEXT NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -103,7 +192,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "aqua_registro.db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     // Solo se usa si la BD instalada es anterior a la versión 3 (no hay ruta de migración).
                     .fallbackToDestructiveMigration()
                     .build()

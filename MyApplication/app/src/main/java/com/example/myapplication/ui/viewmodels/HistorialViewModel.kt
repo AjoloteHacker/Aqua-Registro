@@ -3,7 +3,10 @@ package com.example.myapplication.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.Chequeo
+import com.example.myapplication.data.model.BitacoraPostInmersion
+import com.example.myapplication.data.model.ColorSemaforo
 import com.example.myapplication.data.model.MomentoSalud
+import com.example.myapplication.data.model.MotivoCierreSinTerminar
 import com.example.myapplication.data.model.Pendiente
 import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.data.repository.AquaRepository
@@ -27,6 +30,23 @@ data class HistorialUiState(
     val pendientesPorFaena: Map<String, List<Pendiente>> = emptyMap(),
     /** Novedades reportadas por faena (equipos riesgosos, salud DESPUÉS no apta): no bloquean. */
     val novedadesPorFaena: Map<String, List<String>> = emptyMap(),
+    /** Semáforo industrial calculado para cada faena (VERDE / AMARILLO / ROJO). */
+    val semaforoPorFaena: Map<String, ColorSemaforo> = emptyMap(),
+    /** IDs de registros pendientes de sincronizar con el backend Spring Boot. */
+    val pendientesSincronizarIds: Set<String> = emptySet(),
+    /** IDs de buzos con matrícula marítima DIRECTEMAR vencida. */
+    val buzosConMatriculaVencidaIds: Set<String> = emptySet(),
+    val isNetworkConnected: Boolean = true,
+    /** Bitácoras post-inmersión registradas con velocidades de descenso/ascenso (24/9 m/min). */
+    val bitacorasPostInmersion: List<BitacoraPostInmersion> = emptyList(),
+    val esUsuarioSupervisor: Boolean = true,
+    val rolUsuarioEtiqueta: String = "Supervisor / Prevencionista SEREMI",
+    val registrandoBitacoraFaenaId: String? = null,
+    val errorBitacora: String? = null,
+    val cerrandoSinTerminarFaenaId: String? = null,
+    val motivosAutomaticosCierre: Set<MotivoCierreSinTerminar> = emptySet(),
+    val errorCierreSinTerminar: String? = null,
+    val editandoComentarioFaenaId: String? = null,
     val faenaEnRevisionId: String? = null,
     val editandoFaenaId: String? = null,
     val errorEdicion: String? = null,
@@ -47,6 +67,7 @@ data class HistorialUiState(
             val coincideFiltro = when (selectedFilter) {
                 "En Curso" -> faena.enCurso
                 "Completada" -> faena.completada
+                "Sin Terminar" -> faena.cerradaSinTerminar
                 else -> true
             }
 
@@ -78,6 +99,22 @@ data class HistorialUiState(
     /** Faena cuyos datos se están editando (null si ninguna, o si ya no está en curso). */
     val editandoFaena: RegistroFaena?
         get() = faenas.firstOrNull { it.id == editandoFaenaId && it.enCurso }
+
+    /** Faena para la cual se está registrando o consultando la bitácora post-inmersión (24/9 m/min). */
+    val faenaBitacoraActiva: RegistroFaena?
+        get() = faenas.firstOrNull { it.id == registrandoBitacoraFaenaId }
+
+    /** Faena que se está cerrando anticipadamente ("Faena sin terminar"). */
+    val faenaCerrandoSinTerminar: RegistroFaena?
+        get() = faenas.firstOrNull { it.id == cerrandoSinTerminarFaenaId && it.enCurso }
+
+    /** Faena cerrada sin terminar cuyo comentario se está modificando post-cierre. */
+    val faenaEditandoComentario: RegistroFaena?
+        get() = faenas.firstOrNull { it.id == editandoComentarioFaenaId && it.cerradaSinTerminar }
+
+    /** Alertas históricas de sobrevelocidad (>24 m/min descenso o >9 m/min ascenso) notificadas al Jefe de Centro. */
+    val alertasVelocidad: List<BitacoraPostInmersion>
+        get() = bitacorasPostInmersion.filter { it.alertaVelocidadSuperada }
 }
 
 class HistorialViewModel(
@@ -114,6 +151,35 @@ class HistorialViewModel(
                 _uiState.update { it.copy(historialMedico = lista) }
             }
         }
+        viewModelScope.launch {
+            repository.bitacorasPostInmersion.collect { bitacoras ->
+                _uiState.update { it.copy(bitacorasPostInmersion = bitacoras) }
+            }
+        }
+        viewModelScope.launch {
+            repository.prevencionistaActivo.collect { usuario ->
+                _uiState.update {
+                    it.copy(
+                        esUsuarioSupervisor = usuario?.esSupervisor ?: true,
+                        rolUsuarioEtiqueta = usuario?.rol?.etiqueta ?: "Supervisor / Prevencionista SEREMI"
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            combine(
+                repository.pendientesSincronizarIds,
+                repository.isNetworkConnected
+            ) { pendientes, online -> pendientes to online }
+                .collect { (pendientes, online) ->
+                    _uiState.update {
+                        it.copy(
+                            pendientesSincronizarIds = pendientes,
+                            isNetworkConnected = online
+                        )
+                    }
+                }
+        }
     }
 
     fun onTabChange(tab: Int) = _uiState.update {
@@ -129,11 +195,21 @@ class HistorialViewModel(
         val novedades = enCurso.associate { faena ->
             faena.id to faena.novedades(avances.getValue(faena.id))
         }
+        val semaforos = faenas.associate { faena ->
+            val avance = avances[faena.id] ?: repository.avanceDe(faena)
+            faena.id to if (faena.completada) ColorSemaforo.VERDE else faena.semaforo(avance)
+        }
+        val buzosVencidos = repository.buzos.value
+            .filter { it.matriculaVencida }
+            .map { it.id }
+            .toSet()
         _uiState.update { estado ->
             estado.copy(
                 faenas = faenas,
                 pendientesPorFaena = pendientes,
-                novedadesPorFaena = novedades
+                novedadesPorFaena = novedades,
+                semaforoPorFaena = semaforos,
+                buzosConMatriculaVencidaIds = buzosVencidos
             )
         }
     }
@@ -241,5 +317,148 @@ class HistorialViewModel(
 
     fun clearUserMessage() {
         _uiState.update { it.copy(userMessage = null) }
+    }
+
+    // ───────── Bitácora Post-Inmersión y Velocidades (24 / 9 m/min) ─────────
+
+    fun abrirBitacoraPostInmersion(faenaId: String) {
+        _uiState.update {
+            it.copy(
+                registrandoBitacoraFaenaId = faenaId,
+                errorBitacora = null
+            )
+        }
+    }
+
+    fun cerrarBitacoraPostInmersion() {
+        _uiState.update {
+            it.copy(
+                registrandoBitacoraFaenaId = null,
+                errorBitacora = null
+            )
+        }
+    }
+
+    fun registrarBitacoraPostInmersion(
+        faenaId: String,
+        profundidad: String,
+        tiempoFondo: String,
+        velocidadDescenso: String,
+        velocidadAscenso: String,
+        origenDato: String,
+        observaciones: String
+    ) {
+        val prof = profundidad.trim().toIntOrNull()
+        val mins = tiempoFondo.trim().toIntOrNull()
+        val velDesc = velocidadDescenso.trim().replace(',', '.').toDoubleOrNull()
+        val velAsc = velocidadAscenso.trim().replace(',', '.').toDoubleOrNull()
+
+        repository.registrarBitacoraPostInmersion(
+            faenaId = faenaId,
+            profundidadMetros = prof,
+            tiempoFondoMinutos = mins,
+            velocidadDescensoMpm = velDesc,
+            velocidadAscensoMpm = velAsc,
+            origenDato = origenDato,
+            observaciones = observaciones
+        ).onSuccess { bitacora ->
+            val msg = if (bitacora.alertaVelocidadSuperada) {
+                "ALERTA JEFE DE CENTRO (${bitacora.id}): ${bitacora.detalleAlerta}"
+            } else {
+                "Bitácora post-inmersión ${bitacora.id} registrada sin alertas de velocidad."
+            }
+            _uiState.update {
+                it.copy(
+                    registrandoBitacoraFaenaId = null,
+                    errorBitacora = null,
+                    userMessage = msg
+                )
+            }
+        }.onFailure { err ->
+            _uiState.update {
+                it.copy(errorBitacora = err.message ?: "Error al registrar la bitácora post-inmersión.")
+            }
+        }
+    }
+
+    // ───────── Cierre Anticipado: Faenas sin terminar (docs/nota_3) ─────────
+
+    fun abrirCierreSinTerminar(faenaId: String) {
+        val automaticos = repository.motivosAutomaticosCierre(faenaId)
+        _uiState.update {
+            it.copy(
+                cerrandoSinTerminarFaenaId = faenaId,
+                motivosAutomaticosCierre = automaticos,
+                errorCierreSinTerminar = null
+            )
+        }
+    }
+
+    fun cerrarDialogoSinTerminar() {
+        _uiState.update {
+            it.copy(
+                cerrandoSinTerminarFaenaId = null,
+                motivosAutomaticosCierre = emptySet(),
+                errorCierreSinTerminar = null
+            )
+        }
+    }
+
+    fun confirmarCierreSinTerminar(
+        faenaId: String,
+        motivosSeleccionados: Set<MotivoCierreSinTerminar>,
+        otrosMotivos: List<String>,
+        comentario: String
+    ) {
+        repository.cerrarFaenaSinTerminar(
+            faenaId = faenaId,
+            motivosSeleccionados = motivosSeleccionados,
+            otrosMotivos = otrosMotivos,
+            comentario = comentario
+        ).onSuccess {
+            _uiState.update {
+                it.copy(
+                    cerrandoSinTerminarFaenaId = null,
+                    faenaEnRevisionId = null,
+                    motivosAutomaticosCierre = emptySet(),
+                    errorCierreSinTerminar = null,
+                    userMessage = "Faena $faenaId cerrada sin terminar."
+                )
+            }
+        }.onFailure { err ->
+            _uiState.update {
+                it.copy(
+                    errorCierreSinTerminar = err.message ?: "No se pudo cerrar la faena sin terminar."
+                )
+            }
+        }
+    }
+
+    fun abrirEditarComentarioCierre(faenaId: String) {
+        _uiState.update { it.copy(editandoComentarioFaenaId = faenaId) }
+    }
+
+    fun cerrarEditarComentarioCierre() {
+        _uiState.update { it.copy(editandoComentarioFaenaId = null) }
+    }
+
+    fun guardarComentarioCierre(faenaId: String, nuevoComentario: String) {
+        repository.actualizarComentarioCierreFaena(faenaId, nuevoComentario)
+            .onSuccess {
+                _uiState.update {
+                    it.copy(
+                        editandoComentarioFaenaId = null,
+                        userMessage = "Comentario de cierre de $faenaId actualizado."
+                    )
+                }
+            }
+            .onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        editandoComentarioFaenaId = null,
+                        userMessage = err.message ?: "No se pudo actualizar el comentario."
+                    )
+                }
+            }
     }
 }

@@ -17,6 +17,7 @@ class SessionDataStore(private val context: Context) {
         val KEY_USER_CENTRO = stringPreferencesKey("user_centro")
         val KEY_ULTIMA_SYNC = stringPreferencesKey("ultima_sincronizacion")
         val KEY_PENDIENTES_COUNT = intPreferencesKey("pendientes_sincronizar_count")
+        val KEY_SERVER_URL = stringPreferencesKey("server_base_url")
     }
 
     val userRutFlow: Flow<String?> = context.dataStore.data.map { it[KEY_USER_RUT] }
@@ -24,6 +25,13 @@ class SessionDataStore(private val context: Context) {
     val userCentroFlow: Flow<String?> = context.dataStore.data.map { it[KEY_USER_CENTRO] }
     val ultimaSyncFlow: Flow<String?> = context.dataStore.data.map { it[KEY_ULTIMA_SYNC] }
     val pendientesCountFlow: Flow<Int> = context.dataStore.data.map { it[KEY_PENDIENTES_COUNT] ?: 0 }
+    val serverUrlFlow: Flow<String?> = context.dataStore.data.map { it[KEY_SERVER_URL] }
+
+    suspend fun guardarServerUrl(url: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_SERVER_URL] = url
+        }
+    }
 
     suspend fun guardarSesion(rut: String, nombre: String, centro: String) {
         context.dataStore.edit { preferences ->

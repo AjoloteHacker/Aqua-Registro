@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.model.Buzo
 import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.data.repository.AquaRepository
+import com.example.myapplication.util.PaisTelefono
 import com.example.myapplication.util.RandomUserGenerator
 import com.example.myapplication.util.Rutificador
 import com.example.myapplication.util.SecurityUtils
@@ -32,6 +33,10 @@ data class BuzoUiState(
     val nuevaTalla: Float? = 42f,
     val nuevasAlergias: String = "",
     val nuevaEdad: LocalDate? = null,
+    val nuevoCertificadoAchsUri: String? = null,
+    val nuevoPuntajeCalbuco: String = "90",
+    val nuevaFechaVencimientoMatricula: LocalDate? = LocalDate.now().plusDays(180),
+    val paisTelefono: PaisTelefono = PaisTelefono.CHILE,
     val cargandoFoto: Boolean = false,
     val empresaSeleccionada: String = "",
     val empresasDisponibles: List<String> = emptyList(),
@@ -146,6 +151,10 @@ class BuzoViewModel(
                 nuevaTalla = 42f,
                 nuevasAlergias = "",
                 nuevaEdad = null,
+                nuevoCertificadoAchsUri = null,
+                nuevoPuntajeCalbuco = "90",
+                nuevaFechaVencimientoMatricula = LocalDate.now().plusDays(180),
+                paisTelefono = PaisTelefono.CHILE,
                 empresaSeleccionada = it.empresasDisponibles.firstOrNull() ?: "",
                 error = null
             )
@@ -170,6 +179,9 @@ class BuzoViewModel(
                 nuevoPeso = buzo.peso ?: 78f,
                 nuevasAlergias = buzo.alergias ?: "",
                 nuevaEdad = buzo.edad,
+                nuevoCertificadoAchsUri = buzo.certificadoAchsUri,
+                nuevoPuntajeCalbuco = buzo.puntajeCalbuco.toString(),
+                nuevaFechaVencimientoMatricula = buzo.fechaVencimientoMatricula ?: LocalDate.now().plusDays(180),
                 error = null
             )
         }
@@ -192,6 +204,7 @@ class BuzoViewModel(
                 nuevoRut = "",
                 nuevaMatricula = "",
                 nuevoTelefono = "",
+                nuevoPuntajeCalbuco = "90",
                 error = null
             )
         }
@@ -237,12 +250,60 @@ class BuzoViewModel(
     fun onNuevoNombreChange(v: String) = _uiState.update { it.copy(nuevoNombre = v, error = null) }
     fun onNuevoRutChange(v: String) {
         val filtrado = v.filter { it.isDigit() || it.equals('k', ignoreCase = true) || it == '.' || it == '-' }
-        _uiState.update { it.copy(nuevoRut = filtrado, error = null) }
+        val autoFormateado = Rutificador.formatearEnVivo(filtrado)
+        _uiState.update { it.copy(nuevoRut = autoFormateado, error = null) }
     }
     fun onNuevaMatriculaChange(v: String) = _uiState.update { it.copy(nuevaMatricula = v, error = null) }
+    fun onNuevoPuntajeCalbucoChange(v: String) {
+        if (v.all { it.isDigit() } && v.length <= 3) {
+            _uiState.update { it.copy(nuevoPuntajeCalbuco = v, error = null) }
+        }
+    }
     fun onNuevaCategoriaChange(v: String) = _uiState.update { it.copy(nuevaCategoria = v, error = null) }
-    fun onNuevoTelefonoChange(v: String) = _uiState.update { it.copy(nuevoTelefono = v, error = null) }
-    fun onNuevaVigenciaChange(v: String) = _uiState.update { it.copy(nuevaVigencia = v, error = null) }
+    fun onNuevoTelefonoChange(v: String) {
+        val pais = _uiState.value.paisTelefono
+        val formateado = pais.formatearNumero(v)
+        _uiState.update { it.copy(nuevoTelefono = formateado, error = null) }
+    }
+    fun onPaisTelefonoChange(pais: PaisTelefono) {
+        val reformateado = pais.formatearNumero(_uiState.value.nuevoTelefono)
+        _uiState.update { it.copy(paisTelefono = pais, nuevoTelefono = reformateado, error = null) }
+    }
+    fun onNuevaVigenciaChange(v: String) {
+        val fechaCalculada = when {
+            v.contains("Expirada", ignoreCase = true) -> LocalDate.now().minusDays(5)
+            v.contains("Por renovar", ignoreCase = true) -> LocalDate.now().plusDays(25)
+            else -> LocalDate.now().plusDays(180)
+        }
+        _uiState.update {
+            it.copy(
+                nuevaVigencia = v,
+                nuevaFechaVencimientoMatricula = fechaCalculada,
+                error = null
+            )
+        }
+    }
+    fun onFechaVencimientoMatriculaChange(fecha: LocalDate) {
+        val dias = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), fecha)
+        val etiquetaVig = when {
+            dias < 0 -> "Expirada"
+            dias <= 60 -> "Por renovar (< 30 días)"
+            else -> "Al día"
+        }
+        _uiState.update {
+            it.copy(
+                nuevaFechaVencimientoMatricula = fecha,
+                nuevaVigencia = etiquetaVig,
+                error = null
+            )
+        }
+    }
+    fun onCertificadoAchsChange(uri: String) {
+        _uiState.update { it.copy(nuevoCertificadoAchsUri = uri, error = null) }
+    }
+    fun alternarAlertaNoInvasiva(buzoId: String) {
+        repository.alternarAlertaNoInvasivaBuzo(buzoId)
+    }
     fun onEmpresaSeleccionadaChange(v: String) = _uiState.update { it.copy(empresaSeleccionada = v) }
 
     fun openNuevaEmpresaDialog() = _uiState.update { it.copy(showNuevaEmpresaDialog = true, nuevaEmpresaNombre = "") }
@@ -307,6 +368,7 @@ class BuzoViewModel(
         }
 
         val buzoAEditar = state.buzoAEditar
+        val puntajeFinal = state.nuevoPuntajeCalbuco.toIntOrNull()?.coerceIn(0, 100) ?: 90
 
         if (buzoAEditar == null) {
             // MODO CREAR
@@ -326,7 +388,10 @@ class BuzoViewModel(
                 talla = state.nuevaTalla,
                 peso = state.nuevoPeso,
                 alergias = state.nuevasAlergias,
-                edad = state.nuevaEdad
+                edad = state.nuevaEdad,
+                certificadoAchsUri = state.nuevoCertificadoAchsUri,
+                puntajeCalbuco = puntajeFinal,
+                fechaVencimientoMatricula = state.nuevaFechaVencimientoMatricula
             )
 
             val result = repository.agregarBuzo(nuevo)
@@ -343,6 +408,7 @@ class BuzoViewModel(
                         nuevaTalla = 42f,
                         nuevasAlergias = "",
                         nuevaEdad = null,
+                        nuevoPuntajeCalbuco = "90",
                         userMessage = "Buzo ${buzoAgregado.nombre} enrolado exitosamente.",
                         error = null
                     )
@@ -365,7 +431,10 @@ class BuzoViewModel(
                 talla = state.nuevaTalla,
                 peso = state.nuevoPeso,
                 alergias = state.nuevasAlergias,
-                edad = state.nuevaEdad
+                edad = state.nuevaEdad,
+                certificadoAchsUri = state.nuevoCertificadoAchsUri,
+                puntajeCalbuco = puntajeFinal,
+                fechaVencimientoMatricula = state.nuevaFechaVencimientoMatricula
             )
 
             val result = repository.editarBuzo(actualizado)

@@ -37,6 +37,16 @@ interface AquaApiService {
     @GET("bitacoras/alertas")
     suspend fun getAlertasBitacora(): Response<List<BitacoraInmersionDto>>
 
+    @POST("evidencias")
+    suspend fun registrarEvidencia(
+        @Body evidencia: EvidenciaFotograficaDto
+    ): Response<EvidenciaFotograficaDto>
+
+    @GET("evidencias/faena/{faenaId}")
+    suspend fun getEvidenciasPorFaena(
+        @Path("faenaId") faenaId: String
+    ): Response<List<EvidenciaFotograficaDto>>
+
     @POST("sync/batch")
     suspend fun syncBatch(
         @Body request: SyncBatchRequestDto

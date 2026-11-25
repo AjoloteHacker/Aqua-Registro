@@ -28,6 +28,7 @@ class SyncWorker(
             val faenasLocales = db.faenaDao().getAllFaenas()
 
             val buzosDto = buzosLocales.map {
+                val domain = it.toDomain()
                 BuzoDto(
                     id = it.id,
                     rut = it.rut,
@@ -35,10 +36,10 @@ class SyncWorker(
                     empresa = it.empresa,
                     matricula = it.matricula,
                     telefono = it.telefono,
-                    edad = null,
-                    testEsfuerzoVigente = null,
-                    examenPreocupacionalVigente = null,
-                    puntajeCalbuco = null,
+                    edad = domain.edadAnios,
+                    testEsfuerzoVigente = it.testEsfuerzoVigente,
+                    examenPreocupacionalVigente = it.examenPreocupacionalVigente,
+                    puntajeCalbuco = it.puntajeCalbuco,
                     estadoSalud = it.estadoSalud,
                     ultimoChequeo = it.ultimoChequeo,
                     fotoUrl = it.fotoUrl

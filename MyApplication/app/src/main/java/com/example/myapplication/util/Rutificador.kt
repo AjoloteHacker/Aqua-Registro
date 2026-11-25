@@ -86,4 +86,110 @@ object Rutificador {
         }
         return "$sb-$dv"
     }
+
+    /**
+     * Formatea el RUT automáticamente mientras el usuario escribe, manteniendo
+     * los nuevos dígitos al final (después del guion si ya estaba formateado)
+     * para evitar que el cursor de Compose quede antes del dígito verificador.
+     */
+    fun formatearEnVivo(rut: String): String {
+        val raw = rut.filter { it.isDigit() || it.equals('k', ignoreCase = true) }.uppercase()
+        // Solo se permite dígitos en el cuerpo y dígito o 'K' al final (máximo 9 caracteres: 8 de cuerpo + 1 DV)
+        val limpio = buildString {
+            for (ch in raw) {
+                if (length >= 9) break
+                if (ch.isDigit()) {
+                    append(ch)
+                } else if (ch == 'K' && isNotEmpty() && !contains('K')) {
+                    append(ch)
+                }
+            }
+        }
+        // Si tiene una 'K' intermedia y luego se escribieron más dígitos, mover o ignorar la K intermedia
+        val normalizado = if (limpio.indexOf('K') in 0 until limpio.lastIndex) {
+            limpio.replace("K", "")
+        } else {
+            limpio
+        }
+        if (normalizado.length < 2) return normalizado
+        return formatear(normalizado)
+    }
+}
+
+/**
+ * Países disponibles para formateo automático de números telefónicos (docs/nota_3).
+ */
+enum class PaisTelefono(
+    val codigo: String,
+    val etiqueta: String,
+    val prefijo: String,
+    val codigoPaisDigitos: String,
+    val maxDigitosLocales: Int
+) {
+    CHILE("CL", "Chile (+56)", "+56", "56", 9),
+    ARGENTINA("AR", "Argentina (+54)", "+54", "54", 10),
+    PERU("PE", "Perú (+51)", "+51", "51", 9);
+
+    /**
+     * Extrae únicamente los dígitos locales del número, removiendo cualquier prefijo
+     * internacional (`+56`, `+54`, `+51`) para que se pueda escribir y borrar sin bloqueos.
+     */
+    fun extraerDigitosLocales(entrada: String): String {
+        val trimmed = entrada.trim()
+        // Si ya viene con prefijo explícito "+XX " o "+XX", quitar ese prefijo primero
+        val sinPrefijoExplicito = PaisTelefono.entries.firstOrNull {
+            trimmed.startsWith("${it.prefijo} ") || trimmed.startsWith(it.prefijo)
+        }?.let { paisDetectado ->
+            trimmed.removePrefix(paisDetectado.prefijo).trimStart()
+        } ?: trimmed
+
+        val soloDigitos = sinPrefijoExplicito.filter { it.isDigit() }
+        val sinCodigoPais = if (
+            soloDigitos.startsWith(codigoPaisDigitos) &&
+            soloDigitos.length > maxDigitosLocales
+        ) {
+            soloDigitos.drop(codigoPaisDigitos.length)
+        } else {
+            soloDigitos
+        }
+        return sinCodigoPais.take(maxDigitosLocales)
+    }
+
+    fun formatearNumero(entrada: String): String {
+        val sinPrefijo = extraerDigitosLocales(entrada)
+        if (sinPrefijo.isEmpty()) return ""
+
+        return when (this) {
+            CHILE -> {
+                val p1 = sinPrefijo.take(1)
+                val p2 = sinPrefijo.drop(1).take(4)
+                val p3 = sinPrefijo.drop(5).take(4)
+                buildString {
+                    append("+56 ").append(p1)
+                    if (p2.isNotEmpty()) append(" ").append(p2)
+                    if (p3.isNotEmpty()) append(" ").append(p3)
+                }
+            }
+            ARGENTINA -> {
+                val p1 = sinPrefijo.take(2)
+                val p2 = sinPrefijo.drop(2).take(4)
+                val p3 = sinPrefijo.drop(6).take(4)
+                buildString {
+                    append("+54 ").append(p1)
+                    if (p2.isNotEmpty()) append(" ").append(p2)
+                    if (p3.isNotEmpty()) append(" ").append(p3)
+                }
+            }
+            PERU -> {
+                val p1 = sinPrefijo.take(3)
+                val p2 = sinPrefijo.drop(3).take(3)
+                val p3 = sinPrefijo.drop(6).take(3)
+                buildString {
+                    append("+51 ").append(p1)
+                    if (p2.isNotEmpty()) append(" ").append(p2)
+                    if (p3.isNotEmpty()) append(" ").append(p3)
+                }
+            }
+        }
+    }
 }

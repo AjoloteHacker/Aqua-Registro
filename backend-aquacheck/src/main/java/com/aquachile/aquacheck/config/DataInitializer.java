@@ -87,32 +87,36 @@ public class DataInitializer implements CommandLineRunner {
                     "F-101",
                     "1",
                     "Carlos Soto Paredes",
+                    "3",
+                    "Rodrigo Mansilla Cárdenas",
                     "Servicios Submarinos Austral SpA",
                     "Centro Melinka 1 - Canal Moraleda",
                     "Inspección de redes loberas",
                     18,
                     40,
                     "15/09/2026 09:00",
-                    "EN_CURSO",
+                    "Completada con Éxito",
                     "Cristóbal Loncón C. (SEREMI: PR-10892-X)",
-                    null,
-                    null
+                    "Cristóbal Loncón C.",
+                    "15/09/2026 09:40"
             );
 
             Faena f2 = new Faena(
                     "F-102",
                     "3",
                     "Rodrigo Mansilla Cárdenas",
+                    "2",
+                    "Pedro Almonacid Vera",
                     "Buceos del Sur S.A.",
                     "Centro Chiloé Norte - Isla Lemuy",
                     "Limpieza y retiro de bioincrustaciones en mallas",
                     22,
                     35,
                     "15/09/2026 10:30",
-                    "COMPLETADA",
+                    "Autorizada y en Curso",
                     "Cristóbal Loncón C. (SEREMI: PR-10892-X)",
-                    "Cristóbal Loncón C.",
-                    "15/09/2026 11:15"
+                    null,
+                    null
             );
 
             faenaRepository.saveAll(List.of(f1, f2));

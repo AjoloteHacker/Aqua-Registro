@@ -1,4 +1,4 @@
-# 🌊 AquaCheck Backend (AquaChile) — Microservicios REST y Semáforo Industrial
+# AquaCheck Backend (AquaChile) — Microservicios REST y Semáforo Industrial
 
 > **Proyecto:** AquaCheck — Caso AquaChile  
 > **Asignatura:** DSY1105 Desarrollo de Aplicaciones Móviles / DSY1104 Fullstack  
@@ -7,7 +7,7 @@
 
 ---
 
-## 📌 1. Descripción General del Servicio
+## 1. Descripción General del Servicio
 
 Este backend centraliza la lógica de negocio, validaciones críticas de seguridad de buceo comercial y persistencia para la aplicación móvil **AquaCheck**, cumpliendo con los estándares exigidos para el **7.0 (100% de la rúbrica)** en las evaluaciones **EA4** y **EA5**:
 
@@ -32,7 +32,7 @@ Este backend centraliza la lógica de negocio, validaciones críticas de segurid
 
 ---
 
-## 🚀 2. Instrucciones de Ejecución
+## 2. Instrucciones de Ejecución
 
 ### Requisitos Previos:
 * **JDK 17** instalado (`C:\Program Files\Java\jdk-17`).
@@ -50,7 +50,7 @@ mvn spring-boot:run
 
 ---
 
-## 🌐 3. Accesos y URLs de la Solución
+## 3. Accesos y URLs de la Solución
 
 Una vez iniciado el servidor:
 
@@ -59,11 +59,12 @@ Una vez iniciado el servidor:
 | **Documentación Swagger UI** | [http://localhost:8080/api/swagger-ui/index.html](http://localhost:8080/api/swagger-ui/index.html) | Interfaz gráfica interactiva para probar todos los endpoints REST y ver schemas. |
 | **OpenAPI Spec (JSON)** | [http://localhost:8080/api/v3/api-docs](http://localhost:8080/api/v3/api-docs) | Especificación JSON OpenAPI 3.0 para generación de clientes Retrofit. |
 | **Consola BD H2** | [http://localhost:8080/api/h2-console](http://localhost:8080/api/h2-console) | Consola web para consultar tablas SQL (`JDBC URL: jdbc:h2:file:./data/aquacheck_db`, User: `sa`, Pass: `password`). |
-| **Base URL para Android** | `http://10.0.2.2:8080/api` | Dirección IP especial que utiliza el emulador de Android Studio para acceder al `localhost` de tu PC. |
+| **AjoloServer HTTPS Público** | `https://ajoloserver.tail19de00.ts.net:8443/api/` | Servidor remoto accesible por 4G/5G/Wi-Fi desde dispositivos Android físicos (Tailscale Funnel). |
+| **Base URL Emulador Local** | `http://10.0.2.2:8080/api/` | Dirección IP especial que utiliza el emulador de Android Studio para acceder al `localhost` del PC. |
 
 ---
 
-## 📑 4. Catálogo de Endpoints REST Implementados
+## 4. Catálogo de Endpoints REST Implementados
 
 ### 1. Buzos (`/api/buzos`)
 * `GET /api/buzos`: Listar todos los buzos con sus antecedentes médicos.
@@ -104,7 +105,7 @@ Una vez iniciado el servidor:
 
 ---
 
-## 👥 Datos Semilla Pre-Cargados para Demostración
+## Datos Semilla Pre-Cargados para Demostración
 
 El sistema se inicia con datos listos para probar los escenarios de la defensa:
 1. **Carlos Soto Paredes (RUT: 15.489.231-1, 38 años)**: Buzo con test de esfuerzo al día $\rightarrow$ Demuestra **Semáforo Verde**.

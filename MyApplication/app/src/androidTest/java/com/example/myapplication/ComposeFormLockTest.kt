@@ -9,7 +9,15 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.myapplication.data.model.Buzo
+import com.example.myapplication.data.model.CategoriaPendiente
+import com.example.myapplication.data.model.ColorSemaforo
+import com.example.myapplication.data.model.Pendiente
+import com.example.myapplication.data.model.RegistroFaena
+import com.example.myapplication.ui.screens.RevisionFaenaDialog
+import com.example.myapplication.ui.screens.SemaforoIndustrialCard
 import com.example.myapplication.ui.theme.MyApplicationTheme
+import com.example.myapplication.ui.viewmodels.SaludUiState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,6 +31,70 @@ class ComposeFormLockTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    @Test
+    fun revisionFaenaDialogReal_conIncumplimientoCritico_muestraSemaforoRojoYDeshabilitaFinalizar() {
+        val faenaEnCurso = RegistroFaena(
+            id = "F-102",
+            buzoId = "3",
+            buzoNombre = "Rodrigo Mansilla Cárdenas",
+            socorristaId = "2",
+            socorristaNombre = "Pedro Almonacid Vera",
+            empresa = "Buceos del Sur S.A.",
+            centroCultivo = "Centro Chiloé Norte",
+            tipoFaena = "Inspección de redes",
+            profundidadMetros = 22,
+            tiempoMinutos = 35,
+            fechaHora = "24/11/2026 10:30"
+        )
+        val pendientesCriticos = listOf(
+            Pendiente(
+                CategoriaPendiente.SALUD,
+                "BLOQUEO CRÍTICO (Socorrista): Pedro Almonacid Vera tiene 47 años (>45) sin Test de Esfuerzo vigente"
+            ),
+            Pendiente(
+                CategoriaPendiente.EQUIPOS,
+                "Buzo ejecutor: BLOQUEO por equipo(s) en «No cumple» / Inutilizable (Compresor de aire)"
+            )
+        )
+
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                Column {
+                    SemaforoIndustrialCard(
+                        uiState = SaludUiState(
+                            buzos = listOf(Buzo(id = "2", nombre = "Pedro Almonacid Vera")),
+                            buzoEvaluadoId = "2",
+                            edadBuzo = "47",
+                            testEsfuerzo = false,
+                            compresorCumple = false
+                        )
+                    )
+                    RevisionFaenaDialog(
+                        faena = faenaEnCurso,
+                        semaforo = ColorSemaforo.ROJO,
+                        esSupervisor = true,
+                        pendientes = pendientesCriticos,
+                        novedades = emptyList(),
+                        onEditarDatos = {},
+                        onAprobarDatos = {},
+                        onRevocarAprobacion = {},
+                        onIrAEquipos = {},
+                        onIrASalud = {},
+                        onFinalizar = {},
+                        onDismiss = {}
+                    )
+                }
+            }
+        }
+
+        // Verificar que el Semáforo Rojo y los motivos de bloqueo crítico se muestran en los componentes reales
+        composeTestRule.onAllNodesWithText("SEMÁFORO ROJO", substring = true).onFirst().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("BLOQUEO CRÍTICO", substring = true).onFirst().assertIsDisplayed()
+
+        // Verificar que el botón real "Finalizar faena" está deshabilitado ante pendientes/bloqueos críticos
+        composeTestRule.onNodeWithText("Finalizar faena").assertIsNotEnabled()
+    }
 
     @Test
     fun formularioConIncumplimientoCritico_muestraAlertaYDeshabilitaBotonAprobacion() {
