@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,9 +26,12 @@ import com.example.myapplication.data.model.EvidenciaEquipos
 import com.example.myapplication.data.model.RevisionEquipo
 import com.example.myapplication.data.model.TipoFotoEquipos
 import com.example.myapplication.ui.components.AquaScaffold
+import com.example.myapplication.ui.components.OpcionSelectorFaena
+import com.example.myapplication.ui.components.SelectorFaena
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.ui.viewmodels.EquiposUiState
 import com.example.myapplication.ui.viewmodels.EquiposViewModel
+import com.example.myapplication.ui.viewmodels.FaenaRevision
 
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -117,6 +119,7 @@ fun EquiposScreen(
         ChecklistEquiposContent(
             uiState = uiState,
             onSeleccionarFaena = viewModel::seleccionarFaena,
+            onBusquedaFaenaChange = viewModel::onBusquedaFaenaChange,
             onSeleccionarBuzo = viewModel::seleccionarBuzo,
             onSeleccionarEtapa = viewModel::seleccionarEtapa,
             onEstadoChange = viewModel::actualizarEstado,
@@ -137,6 +140,7 @@ fun EquiposScreen(
 fun ChecklistEquiposContent(
     uiState: EquiposUiState,
     onSeleccionarFaena: (String) -> Unit,
+    onBusquedaFaenaChange: (String) -> Unit,
     onSeleccionarBuzo: (Int) -> Unit,
     onSeleccionarEtapa: (EtapaComprobacion) -> Unit,
     onEstadoChange: (equipoId: String, EstadoEquipo) -> Unit,
@@ -202,29 +206,18 @@ fun ChecklistEquiposContent(
 
         Spacer(Modifier.height(10.dp))
 
-        // Faenas en curso
+        // Faenas en curso: selector con buscador para no depender del desplazamiento horizontal.
         Text("Faena en curso", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AquaTextPrimary)
         Spacer(Modifier.height(4.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(uiState.faenas, key = { it.id }) { faena ->
-                FilterChip(
-                    selected = faena.id == uiState.faenaSeleccionadaId,
-                    onClick = { onSeleccionarFaena(faena.id) },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.ScubaDiving,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    label = {
-                        val secundario = faena.socorristaNombre.takeIf { it.isNotBlank() }
-                            ?.let { " · + $it" } ?: ""
-                        Text("${faena.id} · ${faena.buzoNombre}$secundario (${faena.equiposCompletos}/${faena.totalEquipos})")
-                    }
-                )
-            }
-        }
+        SelectorFaena(
+            opciones = uiState.faenasFiltradas.map { it.aOpcionSelector() },
+            seleccionada = uiState.faenas
+                .firstOrNull { it.id == uiState.faenaSeleccionadaId }
+                ?.aOpcionSelector(),
+            busqueda = uiState.busquedaFaena,
+            onBusquedaChange = onBusquedaFaenaChange,
+            onSeleccionar = onSeleccionarFaena
+        )
 
         Spacer(Modifier.height(10.dp))
 
@@ -300,6 +293,17 @@ fun ChecklistEquiposContent(
         }
     }
 }
+
+private fun FaenaRevision.aOpcionSelector(): OpcionSelectorFaena = OpcionSelectorFaena(
+    id = id,
+    titulo = "$id · $buzoNombre",
+    detalle = buildString {
+        append(tipoFaena)
+        if (socorristaNombre.isNotBlank()) append(" · Soc: ").append(socorristaNombre)
+        if (centroCultivo.isNotBlank()) append(" · ").append(centroCultivo)
+    },
+    meta = "$equiposCompletos/$totalEquipos equipos"
+)
 
 // ───────────────────────── Buzo que se está registrando ─────────────────────────
 

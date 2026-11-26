@@ -27,6 +27,8 @@ data class SaludUiState(
     /** Faenas en curso: la encuesta se registra por faena y por momento (ANTES / DESPUÉS). */
     val faenas: List<RegistroFaena> = emptyList(),
     val faenaSeleccionadaId: String? = null,
+    /** Texto del buscador del selector de faenas. */
+    val busquedaFaena: String = "",
     /** Buzo de la tripulación seleccionado para validar en el semáforo (ejecutor o socorrista). */
     val buzoEvaluadoId: String? = null,
     val momento: MomentoSalud = MomentoSalud.ANTES,
@@ -75,6 +77,19 @@ data class SaludUiState(
 ) {
     val faenaSeleccionada: RegistroFaena?
         get() = faenas.firstOrNull { it.id == faenaSeleccionadaId }
+
+    /** Faenas que coinciden con el buscador (folio, buzos, tipo y centro). */
+    val faenasFiltradas: List<RegistroFaena>
+        get() = faenas.filter {
+            coincideConBusqueda(
+                busquedaFaena,
+                it.id,
+                it.buzoNombre,
+                it.socorristaNombre,
+                it.tipoFaena,
+                it.centroCultivo
+            )
+        }
 
     val tripulacionFaena: List<AsignacionBuzo>
         get() = faenaSeleccionada?.asignaciones().orEmpty()
@@ -241,6 +256,7 @@ class SaludViewModel(
                     _uiState.update {
                         it.copy(
                             faenaSeleccionadaId = solicitud.faenaId,
+                            busquedaFaena = "",
                             momento = solicitud.momento ?: it.momento,
                             userMessage = null
                         )
@@ -253,8 +269,19 @@ class SaludViewModel(
     }
 
     fun seleccionarFaena(faenaId: String) {
-        _uiState.update { it.copy(faenaSeleccionadaId = faenaId, buzoEvaluadoId = null, userMessage = null) }
+        _uiState.update {
+            it.copy(
+                faenaSeleccionadaId = faenaId,
+                busquedaFaena = "",
+                buzoEvaluadoId = null,
+                userMessage = null
+            )
+        }
         recalcular(cargarDatosBuzo = true)
+    }
+
+    fun onBusquedaFaenaChange(texto: String) {
+        _uiState.update { it.copy(busquedaFaena = texto) }
     }
 
     fun seleccionarBuzoEvaluado(buzoId: String) {

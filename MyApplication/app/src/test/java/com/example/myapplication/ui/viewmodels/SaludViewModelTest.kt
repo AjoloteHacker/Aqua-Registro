@@ -279,4 +279,68 @@ class SaludViewModelTest {
         }
         verify(exactly = 1) { repositoryMock.registrarChequeoMedico(any()) }
     }
+
+    @Test
+    fun busquedaDeFaenas_filtraPorCamposYSeLimpiaAlSeleccionar() {
+        val repositoryMock = mockk<AquaRepository>(relaxed = true)
+        val melinka = RegistroFaena(
+            id = "F-401",
+            buzoId = "B-1",
+            buzoNombre = "José Muñoz",
+            socorristaId = "B-2",
+            socorristaNombre = "Ana López",
+            empresa = "AquaChile",
+            centroCultivo = "Centro Melinka",
+            tipoFaena = "Inspección de Fondos",
+            profundidadMetros = 20,
+            tiempoMinutos = 40,
+            fechaHora = "25/11/2026 10:00"
+        )
+        val chiloe = RegistroFaena(
+            id = "F-402",
+            buzoId = "B-3",
+            buzoNombre = "Pedro Soto",
+            empresa = "AquaSub",
+            centroCultivo = "Centro Chiloé",
+            tipoFaena = "Cuidado de redes",
+            profundidadMetros = 18,
+            tiempoMinutos = 30,
+            fechaHora = "25/11/2026 12:00"
+        )
+
+        every { repositoryMock.faenas } returns MutableStateFlow(listOf(melinka, chiloe))
+        every { repositoryMock.buzos } returns MutableStateFlow(emptyList<Buzo>())
+        every { repositoryMock.encuestas } returns MutableStateFlow(emptyMap())
+        every { repositoryMock.revisiones } returns MutableStateFlow(emptyMap())
+        every { repositoryMock.etapasConfirmadas } returns MutableStateFlow(emptySet())
+        every { repositoryMock.historialMedico } returns MutableStateFlow(emptyList<Chequeo>())
+        every { repositoryMock.solicitudRevision } returns MutableStateFlow<SolicitudRevision?>(null)
+        every { repositoryMock.avanceDe(any()) } returns AvanceFaena()
+
+        val viewModel = SaludViewModel(repository = repositoryMock)
+
+        assertEquals(listOf("F-401", "F-402"), viewModel.uiState.value.faenasFiltradas.map { it.id })
+
+        viewModel.onBusquedaFaenaChange("MUNOZ")
+        assertEquals(listOf("F-401"), viewModel.uiState.value.faenasFiltradas.map { it.id })
+
+        viewModel.onBusquedaFaenaChange("lopez")
+        assertEquals(listOf("F-401"), viewModel.uiState.value.faenasFiltradas.map { it.id })
+
+        viewModel.onBusquedaFaenaChange("CHILOE")
+        assertEquals(listOf("F-402"), viewModel.uiState.value.faenasFiltradas.map { it.id })
+
+        viewModel.onBusquedaFaenaChange("redes")
+        assertEquals(listOf("F-402"), viewModel.uiState.value.faenasFiltradas.map { it.id })
+
+        viewModel.onBusquedaFaenaChange("F-401")
+        assertEquals(listOf("F-401"), viewModel.uiState.value.faenasFiltradas.map { it.id })
+
+        viewModel.onBusquedaFaenaChange("no existe")
+        assertTrue(viewModel.uiState.value.faenasFiltradas.isEmpty())
+
+        viewModel.seleccionarFaena("F-402")
+        assertEquals("", viewModel.uiState.value.busquedaFaena)
+        assertEquals("F-402", viewModel.uiState.value.faenaSeleccionadaId)
+    }
 }
