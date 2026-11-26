@@ -28,8 +28,11 @@ import androidx.navigation.NavController
 import com.example.myapplication.data.Chequeo
 import com.example.myapplication.data.model.ColorSemaforo
 import com.example.myapplication.data.model.MomentoSalud
+import com.example.myapplication.data.model.RegistroFaena
 import com.example.myapplication.ui.components.AquaScaffold
+import com.example.myapplication.ui.components.OpcionSelectorFaena
 import com.example.myapplication.ui.components.RuedaSelectorCard
+import com.example.myapplication.ui.components.SelectorFaena
 import com.example.myapplication.ui.theme.*
 import com.example.myapplication.ui.viewmodels.SaludUiState
 import com.example.myapplication.ui.viewmodels.SaludViewModel
@@ -69,6 +72,23 @@ private fun CampoNumerico(
     )
 }
 
+private fun RegistroFaena.aOpcionSelector(): OpcionSelectorFaena = OpcionSelectorFaena(
+    id = id,
+    titulo = "$id · $buzoNombre",
+    detalle = buildString {
+        if (socorristaNombre.isNotBlank()) append("Soc: ").append(socorristaNombre)
+        if (tipoFaena.isNotBlank()) {
+            if (isNotEmpty()) append(" · ")
+            append(tipoFaena)
+        }
+        if (centroCultivo.isNotBlank()) {
+            if (isNotEmpty()) append(" · ")
+            append(centroCultivo)
+        }
+    },
+    meta = fechaHora
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SaludScreen(
@@ -78,7 +98,6 @@ fun SaludScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var dropdownExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.userMessage) {
         uiState.userMessage?.let {
@@ -133,67 +152,13 @@ fun SaludScreen(
                     )
                 }
             } else {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = { dropdownExpanded = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.ScubaDiving,
-                                    contentDescription = null,
-                                    tint = AquaPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = uiState.faenaSeleccionada?.let { faena ->
-                                        buildString {
-                                            append(faena.id).append(" · ").append(faena.buzoNombre)
-                                            if (faena.socorristaNombre.isNotBlank()) {
-                                                append(" · Socorrista: ").append(faena.socorristaNombre)
-                                            }
-                                        }
-                                    } ?: "Seleccionar faena",
-                                    color = AquaTextPrimary,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Desplegar")
-                        }
-                    }
-                    DropdownMenu(
-                        expanded = dropdownExpanded,
-                        onDismissRequest = { dropdownExpanded = false }
-                    ) {
-                        uiState.faenas.forEach { f ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        buildString {
-                                            append(f.id).append(" · ").append(f.buzoNombre)
-                                            if (f.socorristaNombre.isNotBlank()) {
-                                                append(" + ").append(f.socorristaNombre)
-                                            }
-                                            append(" - ").append(f.tipoFaena)
-                                        }
-                                    )
-                                },
-                                onClick = {
-                                    viewModel.seleccionarFaena(f.id)
-                                    dropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
+                SelectorFaena(
+                    opciones = uiState.faenasFiltradas.map { it.aOpcionSelector() },
+                    seleccionada = uiState.faenaSeleccionada?.aOpcionSelector(),
+                    busqueda = uiState.busquedaFaena,
+                    onBusquedaChange = viewModel::onBusquedaFaenaChange,
+                    onSeleccionar = viewModel::seleccionarFaena
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

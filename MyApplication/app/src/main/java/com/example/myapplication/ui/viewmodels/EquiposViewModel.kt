@@ -25,6 +25,7 @@ data class FaenaRevision(
     val buzoNombre: String,
     val socorristaNombre: String = "",
     val tipoFaena: String,
+    val centroCultivo: String = "",
     val equiposCompletos: Int,
     val totalEquipos: Int
 )
@@ -32,6 +33,8 @@ data class FaenaRevision(
 data class EquiposUiState(
     val faenas: List<FaenaRevision> = emptyList(),
     val faenaSeleccionadaId: String? = null,
+    /** Texto del buscador del selector de faenas. */
+    val busquedaFaena: String = "",
     /** Tripulación de la faena, en orden: 0 ejecutor, 1 socorrista. */
     val tripulacion: List<AsignacionBuzo> = emptyList(),
     /** Índice de [tripulacion] que se está registrando en este momento. */
@@ -55,6 +58,19 @@ data class EquiposUiState(
     val fotoCompleta get() = evidencia.estaCompleta(etapa)
     /** Se completa al tener al menos 2 equipos evaluados (o todos si la lista tiene <= 2) + la evidencia fotográfica de la etapa. */
     val todoCompleto get() = equipos.isNotEmpty() && completos >= minOf(2, equipos.size) && fotoCompleta
+
+    /** Faenas que coinciden con el buscador (folio, buzos, tipo y centro). */
+    val faenasFiltradas: List<FaenaRevision>
+        get() = faenas.filter {
+            coincideConBusqueda(
+                busquedaFaena,
+                it.id,
+                it.buzoNombre,
+                it.socorristaNombre,
+                it.tipoFaena,
+                it.centroCultivo
+            )
+        }
 }
 
 // ───────────────────────── ViewModel ─────────────────────────
@@ -105,12 +121,17 @@ class EquiposViewModel(
         _uiState.update {
             it.copy(
                 faenaSeleccionadaId = faenaId,
+                busquedaFaena = "",
                 indiceBuzo = 0,
                 etapa = EtapaComprobacion.PRE_EQUIPACION,
                 userMessage = null
             )
         }
         recargar()
+    }
+
+    fun onBusquedaFaenaChange(texto: String) {
+        _uiState.update { it.copy(busquedaFaena = texto) }
     }
 
     /** Permite volver al ejecutor para corregir sin perder lo ya registrado. */
@@ -244,6 +265,7 @@ class EquiposViewModel(
                 buzoNombre = f.buzoNombre,
                 socorristaNombre = f.socorristaNombre,
                 tipoFaena = f.tipoFaena,
+                centroCultivo = f.centroCultivo,
                 equiposCompletos = items.count { it.evaluacionCompleta },
                 totalEquipos = items.size
             )
