@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -32,7 +31,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.Buzo
-import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.ui.components.AquaScaffold
 import com.example.myapplication.ui.components.RuedaSelectorCard
 import com.example.myapplication.ui.navigation.Screen
@@ -111,72 +109,6 @@ fun BuzoScreen(
                 ),
                 singleLine = true
             )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Filtros rápidos por estado de salud
-            Text(
-                text = "Filtrar por estado:",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = AquaTextSecondary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                item {
-                    FilterChip(
-                        selected = uiState.filtroSalud == null,
-                        onClick = { viewModel.onFiltroSaludChange(null) },
-                        label = { Text("Todos (${uiState.buzos.size})") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AquaPrimary.copy(alpha = 0.2f),
-                            selectedLabelColor = AquaPrimary
-                        )
-                    )
-                }
-                item {
-                    val count = uiState.buzos.count { it.estadoSalud == EstadoSalud.APTO }
-                    FilterChip(
-                        selected = uiState.filtroSalud == EstadoSalud.APTO,
-                        onClick = { viewModel.onFiltroSaludChange(EstadoSalud.APTO) },
-                        label = { Text("Aptos ($count)") },
-                        leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SafetySuccess, modifier = Modifier.size(16.dp)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = SafetyCardBgSuccess,
-                            selectedLabelColor = SafetySuccess
-                        )
-                    )
-                }
-                item {
-                    val count = uiState.buzos.count { it.estadoSalud == EstadoSalud.PENDIENTE }
-                    FilterChip(
-                        selected = uiState.filtroSalud == EstadoSalud.PENDIENTE,
-                        onClick = { viewModel.onFiltroSaludChange(EstadoSalud.PENDIENTE) },
-                        label = { Text("Pendientes ($count)") },
-                        leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = AquaPrimary, modifier = Modifier.size(16.dp)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AquaPrimary.copy(alpha = 0.15f),
-                            selectedLabelColor = AquaPrimary
-                        )
-                    )
-                }
-                item {
-                    val count = uiState.buzos.count { it.estadoSalud == EstadoSalud.NO_APTO }
-                    FilterChip(
-                        selected = uiState.filtroSalud == EstadoSalud.NO_APTO,
-                        onClick = { viewModel.onFiltroSaludChange(EstadoSalud.NO_APTO) },
-                        label = { Text("No Aptos ($count)") },
-                        leadingIcon = { Icon(Icons.Default.Cancel, contentDescription = null, tint = SafetyDanger, modifier = Modifier.size(16.dp)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = SafetyCardBgDanger,
-                            selectedLabelColor = SafetyDanger
-                        )
-                    )
-                }
-            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -294,7 +226,6 @@ fun BuzoScreen(
                             }
                         }
 
-                        FichaItem(label = "Estado de Salud", valor = buzo.estadoSalud.label)
                         FichaItem(label = "Último Chequeo", valor = buzo.ultimoChequeo)
                         FichaItem(label = "Categoría", valor = buzo.categoria)
                         FichaItem(label = "Matrícula Marítima", valor = buzo.matricula)
@@ -994,25 +925,6 @@ fun BuzoCard(
                         text = "RUT: ${buzo.rut} · ${buzo.matricula}",
                         fontSize = 12.sp,
                         color = AquaTextSecondary
-                    )
-                }
-
-                val (badgeColor, badgeBg) = when (buzo.estadoSalud) {
-                    EstadoSalud.APTO -> Pair(SafetySuccess, SafetyCardBgSuccess)
-                    EstadoSalud.NO_APTO -> Pair(SafetyDanger, SafetyCardBgDanger)
-                    EstadoSalud.PENDIENTE -> Pair(AquaPrimary, AquaBackground)
-                }
-
-                Surface(
-                    color = badgeBg,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = buzo.estadoSalud.label.take(12),
-                        color = badgeColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
 

@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.myapplication.data.model.EstadoSalud
 import com.example.myapplication.data.remote.RetrofitClient
 import androidx.compose.material.icons.automirrored.filled.FactCheck
 import com.example.myapplication.ui.viewmodels.MenuViewModel
@@ -64,7 +63,6 @@ fun MenuScreen(
     val buzoUiState by buzoViewModel.uiState.collectAsState()
     var mostrarDialogoServidor by remember { mutableStateOf(false) }
 
-    val buzosAptos = remember(buzos) { buzos.count { it.estadoSalud == EstadoSalud.APTO } }
     val faenasPendientes = remember(faenas) { faenas.count { it.estado != "Completada con Éxito" } }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -150,7 +148,7 @@ fun MenuScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "AquaChile · ${buzos.size} buzos registrados (${buzosAptos} aptos)",
+                            text = "AquaChile · ${buzos.size} buzos registrados",
                             fontSize = 12.sp,
                             color = AquaTextSecondary
                         )
@@ -453,12 +451,12 @@ fun MenuScreen(
                     onClick = { navController.navigate(Screen.Historial.route) }
                 )
 
-                // TARJETA 4: CUADRILLA (Buzos aptos en turno / cuadrilla)
+                // TARJETA 4: CUADRILLA (Buzos en turno / cuadrilla)
                 BocetoCard(
                     modifier = Modifier.weight(1f),
                     numeroBoceto = "4",
                     titulo = "Cuadrilla",
-                    subtitulo = "${buzosAptos} Aptos",
+                    subtitulo = "${buzos.size} Buzos",
                     icono = Icons.Default.Groups,
                     badgeIcon = Icons.Default.CheckCircle,
                     colorTema = SafetySuccess,
