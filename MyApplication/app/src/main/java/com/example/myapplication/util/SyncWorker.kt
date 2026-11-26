@@ -3,12 +3,8 @@ package com.example.myapplication.util
 import android.content.Context
 import android.util.Log
 import androidx.work.*
-import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.SessionDataStore
-import com.example.myapplication.data.remote.RetrofitClient
-import com.example.myapplication.data.remote.dto.BuzoDto
-import com.example.myapplication.data.remote.dto.FaenaDto
-import com.example.myapplication.data.remote.dto.SyncBatchRequestDto
+import com.example.myapplication.data.repository.AquaRepository
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -20,69 +16,16 @@ class SyncWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        Log.d(TAG, "Iniciando trabajo de sincronización en segundo plano con WorkManager...")
+        Log.d(TAG, "Iniciando trabajo de sincronización bidireccional en segundo plano con WorkManager...")
 
         return try {
-            val db = AppDatabase.getInstance(appContext)
-            val buzosLocales = db.buzoDao().getAllBuzos()
-            val faenasLocales = db.faenaDao().getAllFaenas()
+            val repository = AquaRepository.getInstance()
+            repository.setupDatabase(appContext)
+            repository.sincronizarConBackend()
 
-            val buzosDto = buzosLocales.map {
-                val domain = it.toDomain()
-                BuzoDto(
-                    id = it.id,
-                    rut = it.rut,
-                    nombre = it.nombre,
-                    empresa = it.empresa,
-                    matricula = it.matricula,
-                    telefono = it.telefono,
-                    edad = domain.edadAnios,
-                    testEsfuerzoVigente = it.testEsfuerzoVigente,
-                    examenPreocupacionalVigente = it.examenPreocupacionalVigente,
-                    puntajeCalbuco = it.puntajeCalbuco,
-                    estadoSalud = it.estadoSalud,
-                    ultimoChequeo = it.ultimoChequeo,
-                    fotoUrl = it.fotoUrl
-                )
-            }
-
-            val faenasDto = faenasLocales.map {
-                FaenaDto(
-                    id = it.id,
-                    buzoId = it.buzoId,
-                    buzoNombre = it.buzoNombre,
-                    socorristaId = it.socorristaId,
-                    socorristaNombre = it.socorristaNombre,
-                    empresa = it.empresa,
-                    centroCultivo = it.centroCultivo,
-                    tipoFaena = it.tipoFaena,
-                    profundidadMetros = it.profundidadMetros,
-                    tiempoMinutos = it.tiempoMinutos,
-                    fechaHora = it.fechaHora,
-                    estado = it.estado,
-                    autorizadoPor = it.autorizadoPor,
-                    aprobadoPor = it.aprobadoPor,
-                    fechaAprobacion = it.aprobadoEn
-                )
-            }
-
-            val request = SyncBatchRequestDto(
-                dispositivoOrigenId = android.os.Build.MODEL ?: "Android-AquaCheck",
-                buzos = buzosDto,
-                faenas = faenasDto
-            )
-
-            val apiResponse = RetrofitClient.aquaApi.syncBatch(request)
-
-            if (apiResponse.isSuccessful && apiResponse.body()?.estado == "EXITO") {
-                val now = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())
-                Log.d(TAG, "Sincronización completada con éxito: ${apiResponse.body()?.totalSincronizados} registros sincronizados.")
-                SessionDataStore(appContext).registrarSincronizacionExitosa(now)
-                Result.success()
-            } else {
-                Log.w(TAG, "Respuesta no exitosa del backend: ${apiResponse.code()}")
-                Result.retry()
-            }
+            val now = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())
+            SessionDataStore(appContext).registrarSincronizacionExitosa(now)
+            Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "Error en SyncWorker: ${e.message}", e)
             Result.retry()

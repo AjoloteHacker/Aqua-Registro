@@ -25,6 +25,10 @@ class MenuViewModel(
     val servidorOnline: StateFlow<Boolean> = repository.servidorOnline
     val ultimoPingDetalle: StateFlow<String> = repository.ultimoPingDetalle
 
+    init {
+        repository.refrescarSiEsNecesario()
+    }
+
     fun sincronizarAhora() {
         repository.sincronizarAhora()
     }

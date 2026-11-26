@@ -36,6 +36,10 @@ public class BuzoService {
     }
 
     public void eliminar(String id) {
-        buzoRepository.deleteById(id);
+        if (buzoRepository.existsById(id)) {
+            buzoRepository.deleteById(id);
+        } else {
+            buzoRepository.findByRut(id).ifPresent(buzoRepository::delete);
+        }
     }
 }

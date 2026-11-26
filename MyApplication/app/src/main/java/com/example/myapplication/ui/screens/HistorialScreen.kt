@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -99,121 +100,129 @@ fun HistorialScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            OutlinedTextField(
-                value = uiState.searchQuery,
-                onValueChange = { viewModel.onSearchQueryChange(it) },
-                label = {
-                    Text(
-                        if (uiState.selectedTab == 0)
-                            "Buscar por folio, buzo, supervisor o centro"
-                        else
-                            "Buscar por buzo, RUT, folio o evaluador"
-                    )
-                },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar", tint = AquaPrimary) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White
-                )
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            val filtrosActuales = if (uiState.selectedTab == 0) {
-                listOf("Todas", "En Curso", "Completada", "Sin Terminar")
-            } else {
-                listOf("Todas", "Aptos", "No Aptos")
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Todo el contenido (buscador, filtros horizontales, alertas y registros) se mueve fluidamente en LazyColumn
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                filtrosActuales.forEach { filtro ->
-                    FilterChip(
-                        selected = uiState.selectedFilter == filtro,
-                        onClick = { viewModel.onFilterChange(filtro) },
-                        label = { Text(filtro, fontSize = 12.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = AquaSecondary.copy(alpha = 0.2f),
-                            selectedLabelColor = AquaPrimary
+                item {
+                    OutlinedTextField(
+                        value = uiState.searchQuery,
+                        onValueChange = { viewModel.onSearchQueryChange(it) },
+                        label = {
+                            Text(
+                                if (uiState.selectedTab == 0)
+                                    "Buscar por folio, buzo, supervisor o centro"
+                                else
+                                    "Buscar por buzo, RUT, folio o evaluador"
+                            )
+                        },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar", tint = AquaPrimary) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
                         )
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
+                item {
+                    val filtrosActuales = if (uiState.selectedTab == 0) {
+                        listOf("Todas", "En Curso", "Completada", "Sin Terminar")
+                    } else {
+                        listOf("Todas", "Aptos", "No Aptos")
+                    }
 
-            if (uiState.selectedTab == 0) {
-                if (uiState.alertasVelocidad.isNotEmpty()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = SafetyCardBgDanger)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.WarningAmber,
-                                    contentDescription = null,
-                                    tint = SafetyDanger,
-                                    modifier = Modifier.size(18.dp)
+                        filtrosActuales.forEach { filtro ->
+                            FilterChip(
+                                selected = uiState.selectedFilter == filtro,
+                                onClick = { viewModel.onFilterChange(filtro) },
+                                label = { Text(filtro, fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AquaSecondary.copy(alpha = 0.2f),
+                                    selectedLabelColor = AquaPrimary
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "ALERTAS JEFE DE CENTRO · VELOCIDAD 24/9 m/min (${uiState.alertasVelocidad.size})",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.sp,
-                                    color = SafetyDanger
-                                )
-                            }
-                            uiState.alertasVelocidad.take(2).forEach { alerta ->
-                                Text(
-                                    text = "• ${alerta.faenaId} (${alerta.buzoNombre}): Descenso ${alerta.velocidadDescensoMpm} m/min / Ascenso ${alerta.velocidadAscensoMpm} m/min · ${alerta.estadoRevision}",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = SafetyDanger
-                                )
-                            }
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                Text(
-                    text = "Registros de Bitácora (${uiState.faenasFiltradas.size})",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = AquaTextPrimary
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (uiState.faenasFiltradas.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.SearchOff, contentDescription = "Sin resultados", tint = Color.Gray, modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("No se encontraron registros de faena", color = AquaTextSecondary)
+                if (uiState.selectedTab == 0) {
+                    if (uiState.alertasVelocidad.isNotEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = SafetyCardBgDanger)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.WarningAmber,
+                                            contentDescription = null,
+                                            tint = SafetyDanger,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "ALERTAS JEFE DE CENTRO · VELOCIDAD 24/9 m/min (${uiState.alertasVelocidad.size})",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 12.sp,
+                                            color = SafetyDanger
+                                        )
+                                    }
+                                    uiState.alertasVelocidad.take(3).forEach { alerta ->
+                                        Text(
+                                            text = "• ${alerta.faenaId} (${alerta.buzoNombre}): Descenso ${alerta.velocidadDescensoMpm} m/min / Ascenso ${alerta.velocidadAscensoMpm} m/min · ${alerta.estadoRevision}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = SafetyDanger
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
-                } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
+
+                    item {
+                        Text(
+                            text = "Registros de Bitácora (${uiState.faenasFiltradas.size})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = AquaTextPrimary
+                        )
+                    }
+
+                    if (uiState.faenasFiltradas.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.SearchOff, contentDescription = "Sin resultados", tint = Color.Gray, modifier = Modifier.size(48.dp))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("No se encontraron registros de faena", color = AquaTextSecondary)
+                                }
+                            }
+                        }
+                    } else {
                         items(uiState.faenasFiltradas, key = { it.id }) { faena ->
                             val bitacorasFaena = uiState.bitacorasPostInmersion.filter { it.faenaId == faena.id }
                             FaenaCard(
@@ -231,33 +240,32 @@ fun HistorialScreen(
                             )
                         }
                     }
-                }
-            } else {
-                Text(
-                    text = "Evaluaciones Médicas Registradas (${uiState.chequeosFiltrados.size})",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = AquaTextPrimary
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (uiState.chequeosFiltrados.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.SearchOff, contentDescription = "Sin resultados", tint = Color.Gray, modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("No se encontraron registros médicos", color = AquaTextSecondary)
-                        }
-                    }
                 } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
+                    item {
+                        Text(
+                            text = "Evaluaciones Médicas Registradas (${uiState.chequeosFiltrados.size})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = AquaTextPrimary
+                        )
+                    }
+
+                    if (uiState.chequeosFiltrados.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.SearchOff, contentDescription = "Sin resultados", tint = Color.Gray, modifier = Modifier.size(48.dp))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("No se encontraron registros médicos", color = AquaTextSecondary)
+                                }
+                            }
+                        }
+                    } else {
                         items(uiState.chequeosFiltrados, key = { it.id }) { chequeo ->
                             ElevatedCard(
                                 modifier = Modifier.fillMaxWidth(),
@@ -274,6 +282,10 @@ fun HistorialScreen(
                             }
                         }
                     }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
@@ -592,7 +604,7 @@ fun FaenaCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Prof: ${faena.profundidadMetros}m · ${faena.tiempoMinutos} min",
                         fontSize = 11.sp,
@@ -647,44 +659,58 @@ fun FaenaCard(
                         }
                     }
                 }
+            }
 
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Botones de acción homogéneos (mismo alto 38.dp y distribución equilibrada)
+            if (enCurso) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (enCurso) {
-                        OutlinedButton(
-                            onClick = onRevisar,
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetySuccess)
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Revisar y finalizar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                        OutlinedButton(
-                            onClick = onCerrarSinTerminar,
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetyDanger)
-                        ) {
-                            Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Cerrar sin terminar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
+                    OutlinedButton(
+                        onClick = onRevisar,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetySuccess)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Revisar / Finalizar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
-                        onClick = onAbrirBitacoraPost,
+                        onClick = onCerrarSinTerminar,
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AquaPrimary)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetyDanger)
                     ) {
-                        Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Default.Cancel, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Bitácora Post (24/9)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Cerrar Faena", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            OutlinedButton(
+                onClick = onAbrirBitacoraPost,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AquaPrimary)
+            ) {
+                Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Bitácora Post-Inmersión (24/9 m/min)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
 
             if (faena.cierreSinTerminar != null) {
@@ -967,9 +993,11 @@ fun RevisionFaenaDialog(
                 ) {
                     OutlinedButton(
                         onClick = onEditarDatos,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
                         Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -979,9 +1007,11 @@ fun RevisionFaenaDialog(
                         Button(
                             onClick = onAprobarDatos,
                             enabled = esSupervisor,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                         ) {
                             Text("Aprobar datos", fontSize = 12.sp)
                         }
@@ -989,9 +1019,11 @@ fun RevisionFaenaDialog(
                         OutlinedButton(
                             onClick = onRevocarAprobacion,
                             enabled = esSupervisor,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                         ) {
                             Text("Quitar aprobación", fontSize = 12.sp)
                         }
@@ -1041,7 +1073,9 @@ fun RevisionFaenaDialog(
                 if (hayPendientesEquipos) {
                     OutlinedButton(
                         onClick = onIrAEquipos,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.Build, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -1052,7 +1086,9 @@ fun RevisionFaenaDialog(
                 if (hayPendientesSalud) {
                     OutlinedButton(
                         onClick = onIrASalud,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -1077,7 +1113,9 @@ fun RevisionFaenaDialog(
                 HorizontalDivider(color = Color.LightGray.copy(alpha = 0.4f))
                 OutlinedButton(
                     onClick = onCerrarSinTerminar,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = SafetyDanger)
                 ) {
@@ -1088,12 +1126,19 @@ fun RevisionFaenaDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onFinalizar, enabled = pendientes.isEmpty() && esSupervisor) {
+            Button(
+                onClick = onFinalizar,
+                enabled = pendientes.isEmpty() && esSupervisor,
+                modifier = Modifier.height(40.dp)
+            ) {
                 Text(if (esSupervisor) "Finalizar faena" else "Requiere Supervisor")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cerrar") }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(40.dp)
+            ) { Text("Cerrar") }
         }
     )
 }
@@ -1191,12 +1236,18 @@ fun EditarDatosFaenaDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onGuardar(centro, tipo, profundidad, minutos) }) {
+            Button(
+                onClick = { onGuardar(centro, tipo, profundidad, minutos) },
+                modifier = Modifier.height(40.dp)
+            ) {
                 Text("Guardar cambios")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(40.dp)
+            ) { Text("Cancelar") }
         }
     )
 }
@@ -1384,6 +1435,7 @@ fun RegistrarBitacoraPostInmersionDialog(
                 onClick = {
                     onGuardar(profundidad, tiempoFondo, velocidadDescenso, velocidadAscenso, origenDato, observaciones)
                 },
+                modifier = Modifier.height(40.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (hayAlerta) SafetyDanger else AquaPrimary
                 )
@@ -1392,7 +1444,10 @@ fun RegistrarBitacoraPostInmersionDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(40.dp)
+            ) { Text("Cancelar") }
         }
     )
 }
@@ -1546,13 +1601,17 @@ fun CerrarFaenaSinTerminarDialog(
         confirmButton = {
             Button(
                 onClick = { onConfirmar(seleccionados, otrosMotivos, comentario) },
+                modifier = Modifier.height(40.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = SafetyDanger)
             ) {
-                Text("Confirmar Cierre sin Terminar")
+                Text("Confirmar Cierre")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(40.dp)
+            ) { Text("Cancelar") }
         }
     )
 }
@@ -1594,12 +1653,18 @@ fun EditarComentarioCierreDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onGuardar(comentario) }) {
+            Button(
+                onClick = { onGuardar(comentario) },
+                modifier = Modifier.height(40.dp)
+            ) {
                 Text("Guardar comentario")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(40.dp)
+            ) { Text("Cancelar") }
         }
     )
 }

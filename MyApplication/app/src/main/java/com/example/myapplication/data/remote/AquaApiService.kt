@@ -12,6 +12,9 @@ interface AquaApiService {
     @POST("buzos")
     suspend fun createOrUpdateBuzo(@Body buzo: BuzoDto): Response<BuzoDto>
 
+    @DELETE("buzos/{id}")
+    suspend fun deleteBuzo(@Path("id") id: String): Response<Void>
+
     @GET("faenas")
     suspend fun getFaenas(): Response<List<FaenaDto>>
 
@@ -34,8 +37,14 @@ interface AquaApiService {
         @Body bitacora: BitacoraInmersionDto
     ): Response<BitacoraInmersionDto>
 
+    @GET("bitacoras")
+    suspend fun getBitacoras(): Response<List<BitacoraInmersionDto>>
+
     @GET("bitacoras/alertas")
     suspend fun getAlertasBitacora(): Response<List<BitacoraInmersionDto>>
+
+    @GET("chequeos-medicos")
+    suspend fun getChequeosMedicos(): Response<List<ChequeoMedicoDto>>
 
     @POST("evidencias")
     suspend fun registrarEvidencia(

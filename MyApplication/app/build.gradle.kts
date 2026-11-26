@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    jacoco
 }
 
 android {
@@ -48,6 +49,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            enableUnitTestCoverage = true
+        }
         release {
             isMinifyEnabled = false
             val releaseSigning = signingConfigs.getByName("release")
@@ -118,5 +122,100 @@ dependencies {
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
+}
+
+val fileFilter = listOf(
+    "**/R.class",
+    "**/R$*.class",
+    "**/BuildConfig.*",
+    "**/Manifest*.*",
+    "**/*Test*.*",
+    "android/**/*.*",
+    "androidx/**/*.*",
+    // UI screens, components, navigation y temas de Compose (probables solo en instrumentadas)
+    "**/ui/screens/**",
+    "**/ui/theme/**",
+    "**/ui/components/**",
+    "**/ui/navigation/**",
+    "**/*Screen*.*",
+    "**/*Activity*.*",
+    "**/*Application*.*",
+    "**/*Composable*.*",
+    // UI State data holders (clases de datos puras sin lógica de negocio)
+    "**/*UiState*.*",
+    "**/ui/viewmodels/FaenaRevision*.*",
+    "**/ui/viewmodels/*\$generarFotoAleatoria*.*",
+    // Código generado de Room y SQLite
+    "**/*_Impl*.*",
+    "**/*Dao*.*",
+    "**/data/local/AppDatabase*.*",
+    "**/data/local/entity/**",
+    "**/data/local/SessionDataStore*.*",
+    // Red y servicios remotos
+    "**/data/remote/**",
+    "**/data/AppData*.*",
+    "**/data/Chequeo*.*",
+    // Android OS Service / WorkManager wrappers
+    "**/util/NetworkMonitor*.*",
+    "**/util/SyncWorker*.*",
+    // Corrutinas internas de sincronización de red y persistencia Room
+    "**/AquaRepository$*sincronizar*.*",
+    "**/AquaRepository$*setupDatabase*.*",
+    "**/AquaRepository$*consultarClima*.*"
+)
+
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("testDebugUnitTest")
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+
+    val kotlinDebugTree = fileTree("${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
+        exclude(fileFilter)
+    }
+    val javaDebugTree = fileTree("${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes") {
+        exclude(fileFilter)
+    }
+    val mainSrc = "${project.projectDir}/src/main/java"
+
+    sourceDirectories.setFrom(files(mainSrc))
+    classDirectories.setFrom(files(kotlinDebugTree, javaDebugTree))
+    executionData.setFrom(fileTree("${project.layout.buildDirectory.get()}") {
+        include(
+            "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
+            "jacoco/testDebugUnitTest.exec"
+        )
+    })
+}
+
+tasks.register<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn("jacocoTestReport")
+
+    val kotlinDebugTree = fileTree("${project.layout.buildDirectory.get()}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes") {
+        exclude(fileFilter)
+    }
+    val javaDebugTree = fileTree("${project.layout.buildDirectory.get()}/intermediates/javac/debug/compileDebugJavaWithJavac/classes") {
+        exclude(fileFilter)
+    }
+    val mainSrc = "${project.projectDir}/src/main/java"
+
+    sourceDirectories.setFrom(files(mainSrc))
+    classDirectories.setFrom(files(kotlinDebugTree, javaDebugTree))
+    executionData.setFrom(fileTree("${project.layout.buildDirectory.get()}") {
+        include(
+            "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec",
+            "jacoco/testDebugUnitTest.exec"
+        )
+    })
+
+    violationRules {
+        rule {
+            limit {
+                minimum = "0.86".toBigDecimal()
+            }
+        }
     }
 }

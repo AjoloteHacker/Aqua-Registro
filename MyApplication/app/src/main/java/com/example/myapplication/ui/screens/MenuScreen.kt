@@ -210,7 +210,10 @@ fun MenuScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { menuViewModel.sincronizarAhora() }
+                            .clickable {
+                                menuViewModel.probarConexionServidor()
+                                mostrarDialogoServidor = true
+                            }
                     ) {
                         Icon(
                             imageVector = when {
@@ -241,35 +244,28 @@ fun MenuScreen(
                         )
                     }
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isConnected) {
-                            Text(
-                                text = "Sincronizar",
-                                fontSize = 10.sp,
-                                color = AquaPrimary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.clickable { menuViewModel.sincronizarAhora() }
-                            )
-                        }
                         Surface(
                             color = AquaPrimary.copy(alpha = 0.12f),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.clickable {
-                                menuViewModel.probarConexionServidor()
-                                mostrarDialogoServidor = true
-                            }
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clickable {
+                                    menuViewModel.probarConexionServidor()
+                                    mostrarDialogoServidor = true
+                                }
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Dns,
                                     contentDescription = "Configurar Servidor",
                                     tint = AquaPrimary,
-                                    modifier = Modifier.size(12.dp)
+                                    modifier = Modifier.size(13.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
@@ -283,15 +279,28 @@ fun MenuScreen(
                         Surface(
                             color = if (isConnected) AquaBackground else Color(0xFFFEF3C7),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.clickable { menuViewModel.alternarModoOfflineDemo() }
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clickable { menuViewModel.alternarModoOfflineDemo() }
                         ) {
-                            Text(
-                                text = if (isConnected) "Modo Offline" else "Reconectar",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isConnected) AquaTextSecondary else Color(0xFFB45309),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isConnected) Icons.Default.CloudOff else Icons.Default.CloudQueue,
+                                    contentDescription = null,
+                                    tint = if (isConnected) AquaTextSecondary else Color(0xFFB45309),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isConnected) "Modo Offline" else "Reconectar",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isConnected) AquaTextSecondary else Color(0xFFB45309)
+                                )
+                            }
                         }
                     }
                 }
@@ -533,7 +542,6 @@ fun MenuScreen(
                 onCambiarUrl = { nuevaUrl ->
                     menuViewModel.cambiarUrlServidor(nuevaUrl)
                 },
-                onAlternarOffline = { menuViewModel.alternarModoOfflineDemo() },
                 onSincronizar = { menuViewModel.sincronizarAhora() },
                 onDismiss = { mostrarDialogoServidor = false }
             )
@@ -550,17 +558,14 @@ private fun ConfigurarServidorDialog(
     pendientesCount: Int,
     onProbarConexion: () -> Unit,
     onCambiarUrl: (String) -> Unit,
-    onAlternarOffline: () -> Unit,
     onSincronizar: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var urlEditable by remember(serverUrl) { mutableStateOf(serverUrl) }
-
     val presets = listOf(
-        "Servidor Central HTTPS (4G/5G/Wi-Fi)" to RetrofitClient.URL_AJOLOSERVER_PUBLICA,
-        "Servidor Red Tailscale (100.124.162.2)" to RetrofitClient.URL_AJOLOSERVER_TAILSCALE,
-        "Servidor Wi-Fi Local (192.168.4.143)" to RetrofitClient.URL_AJOLOSERVER_LAN,
-        "Emulador Android Studio (10.0.2.2:8080)" to RetrofitClient.URL_EMULADOR_LOCAL
+        "Servidor Central (Nube / 4G / Wi-Fi)" to RetrofitClient.URL_AJOLOSERVER_PUBLICA,
+        "Servidor Local Wi-Fi" to RetrofitClient.URL_AJOLOSERVER_LAN,
+        "Servidor Red Privada (Tailscale)" to RetrofitClient.URL_AJOLOSERVER_TAILSCALE,
+        "Emulador Android Studio" to RetrofitClient.URL_EMULADOR_LOCAL
     )
 
     AlertDialog(
@@ -577,14 +582,14 @@ private fun ConfigurarServidorDialog(
                 Text(
                     text = "Conexión con el Servidor",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    fontSize = 16.sp
                 )
             }
         },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Surface(
                     color = when {
@@ -596,7 +601,7 @@ private fun ConfigurarServidorDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.padding(10.dp),
+                        modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -612,14 +617,14 @@ private fun ConfigurarServidorDialog(
                                     servidorOnline -> SafetySuccess
                                     else -> SafetyDanger
                                 },
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = when {
-                                    !isConnected -> "MODO OFFLINE ACTIVO (ROOM SQLITE)"
-                                    servidorOnline -> "CONECTADO AL SERVIDOR CENTRAL"
-                                    else -> "SERVIDOR EN VERIFICACIÓN / CACHÉ ROOM"
+                                    !isConnected -> "SIN CONEXIÓN DE RED"
+                                    servidorOnline -> "CONECTADO AL SERVIDOR"
+                                    else -> "SERVIDOR NO DISPONIBLE"
                                 },
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
@@ -635,83 +640,64 @@ private fun ConfigurarServidorDialog(
                             fontSize = 11.sp,
                             color = AquaTextPrimary
                         )
-                        Text(
-                            text = "Registros en cola local Room pendientes de subir: $pendientesCount",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (pendientesCount > 0) Color(0xFFB45309) else AquaTextSecondary
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Simular Modo Sin Conexión (Offline)",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AquaTextPrimary
-                        )
-                        Text(
-                            text = "Guarda en Room SQLite y encola para WorkManager al reconectar",
-                            fontSize = 10.sp,
-                            color = AquaTextSecondary
-                        )
-                    }
-                    Switch(
-                        checked = !isConnected,
-                        onCheckedChange = { onAlternarOffline() }
-                    )
-                }
-
-                HorizontalDivider()
-
-                Text(
-                    text = "Seleccionar Servidor:",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AquaTextPrimary
-                )
-
-                presets.forEach { (etiqueta, urlPreset) ->
-                    val seleccionado = urlEditable.equals(urlPreset, ignoreCase = true)
-                    Surface(
-                        color = if (seleccionado) AquaPrimary.copy(alpha = 0.12f) else AquaBackground,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                urlEditable = urlPreset
-                                onCambiarUrl(urlPreset)
-                            }
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        if (pendientesCount > 0) {
                             Text(
-                                text = etiqueta,
+                                text = "Registros locales pendientes de sincronizar: $pendientesCount",
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (seleccionado) AquaPrimary else AquaTextPrimary
-                            )
-                            Text(
-                                text = urlPreset,
-                                fontSize = 10.sp,
-                                color = AquaTextSecondary
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFB45309)
                             )
                         }
                     }
                 }
 
-                OutlinedTextField(
-                    value = urlEditable,
-                    onValueChange = { urlEditable = it },
-                    label = { Text("URL Base del Servidor (/api/)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                Text(
+                    text = "Seleccionar Servidor:",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AquaTextPrimary
                 )
+
+                presets.forEach { (etiqueta, urlPreset) ->
+                    val seleccionado = serverUrl.trimEnd('/') == urlPreset.trimEnd('/')
+                    Surface(
+                        color = if (seleccionado) AquaPrimary.copy(alpha = 0.10f) else AquaBackground,
+                        shape = RoundedCornerShape(10.dp),
+                        border = if (seleccionado) androidx.compose.foundation.BorderStroke(1.5.dp, AquaPrimary) else null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onCambiarUrl(urlPreset)
+                                onProbarConexion()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = seleccionado,
+                                onClick = {
+                                    onCambiarUrl(urlPreset)
+                                    onProbarConexion()
+                                },
+                                colors = RadioButtonDefaults.colors(selectedColor = AquaPrimary),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = etiqueta,
+                                fontSize = 12.sp,
+                                fontWeight = if (seleccionado) FontWeight.Bold else FontWeight.Medium,
+                                color = if (seleccionado) AquaPrimary else AquaTextPrimary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -719,30 +705,36 @@ private fun ConfigurarServidorDialog(
                 ) {
                     OutlinedButton(
                         onClick = onProbarConexion,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Ping", fontSize = 11.sp)
+                        Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Hacer Ping", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     Button(
-                        onClick = {
-                            onCambiarUrl(urlEditable)
-                            onSincronizar()
-                        },
+                        onClick = onSincronizar,
                         colors = ButtonDefaults.buttonColors(containerColor = AquaPrimary),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Guardar y Sync", fontSize = 11.sp)
+                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Sincronizar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cerrar")
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(38.dp)
+            ) {
+                Text("Cerrar", fontWeight = FontWeight.Bold)
             }
         }
     )

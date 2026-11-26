@@ -45,13 +45,49 @@ public class SyncService {
 
         try {
             if (request.getBuzos() != null && !request.getBuzos().isEmpty()) {
-                buzoRepository.saveAll(request.getBuzos());
+                for (Buzo incoming : request.getBuzos()) {
+                    if (incoming.getId() == null || incoming.getId().isBlank()) continue;
+                    buzoRepository.findById(incoming.getId()).ifPresentOrElse(existing -> {
+                        if (incoming.getRut() != null && !incoming.getRut().isBlank()) existing.setRut(incoming.getRut());
+                        if (incoming.getNombre() != null && !incoming.getNombre().isBlank()) existing.setNombre(incoming.getNombre());
+                        if (incoming.getEmpresa() != null && !incoming.getEmpresa().isBlank()) existing.setEmpresa(incoming.getEmpresa());
+                        if (incoming.getMatricula() != null && !incoming.getMatricula().isBlank()) existing.setMatricula(incoming.getMatricula());
+                        if (incoming.getTelefono() != null && !incoming.getTelefono().isBlank()) existing.setTelefono(incoming.getTelefono());
+                        if (incoming.getEdad() != null) existing.setEdad(incoming.getEdad());
+                        if (incoming.getTestEsfuerzoVigente() != null) existing.setTestEsfuerzoVigente(incoming.getTestEsfuerzoVigente());
+                        if (incoming.getExamenPreocupacionalVigente() != null) existing.setExamenPreocupacionalVigente(incoming.getExamenPreocupacionalVigente());
+                        if (incoming.getPuntajeCalbuco() != null) existing.setPuntajeCalbuco(incoming.getPuntajeCalbuco());
+                        if (incoming.getEstadoSalud() != null && !incoming.getEstadoSalud().isBlank()) existing.setEstadoSalud(incoming.getEstadoSalud());
+                        if (incoming.getUltimoChequeo() != null && !incoming.getUltimoChequeo().isBlank()) existing.setUltimoChequeo(incoming.getUltimoChequeo());
+                        if (incoming.getFotoUrl() != null && !incoming.getFotoUrl().isBlank()) existing.setFotoUrl(incoming.getFotoUrl());
+                        buzoRepository.save(existing);
+                    }, () -> buzoRepository.save(incoming));
+                }
                 contador += request.getBuzos().size();
                 response.getMensajes().add("Buzos sincronizados: " + request.getBuzos().size());
             }
 
             if (request.getFaenas() != null && !request.getFaenas().isEmpty()) {
-                faenaRepository.saveAll(request.getFaenas());
+                for (Faena incoming : request.getFaenas()) {
+                    if (incoming.getId() == null || incoming.getId().isBlank()) continue;
+                    faenaRepository.findById(incoming.getId()).ifPresentOrElse(existing -> {
+                        if (incoming.getBuzoId() != null && !incoming.getBuzoId().isBlank()) existing.setBuzoId(incoming.getBuzoId());
+                        if (incoming.getBuzoNombre() != null && !incoming.getBuzoNombre().isBlank()) existing.setBuzoNombre(incoming.getBuzoNombre());
+                        if (incoming.getSocorristaId() != null && !incoming.getSocorristaId().isBlank()) existing.setSocorristaId(incoming.getSocorristaId());
+                        if (incoming.getSocorristaNombre() != null && !incoming.getSocorristaNombre().isBlank()) existing.setSocorristaNombre(incoming.getSocorristaNombre());
+                        if (incoming.getEmpresa() != null && !incoming.getEmpresa().isBlank()) existing.setEmpresa(incoming.getEmpresa());
+                        if (incoming.getCentroCultivo() != null && !incoming.getCentroCultivo().isBlank()) existing.setCentroCultivo(incoming.getCentroCultivo());
+                        if (incoming.getTipoFaena() != null && !incoming.getTipoFaena().isBlank()) existing.setTipoFaena(incoming.getTipoFaena());
+                        if (incoming.getProfundidadMetros() != null) existing.setProfundidadMetros(incoming.getProfundidadMetros());
+                        if (incoming.getTiempoMinutos() != null) existing.setTiempoMinutos(incoming.getTiempoMinutos());
+                        if (incoming.getFechaHora() != null && !incoming.getFechaHora().isBlank()) existing.setFechaHora(incoming.getFechaHora());
+                        if (incoming.getEstado() != null && !incoming.getEstado().isBlank()) existing.setEstado(incoming.getEstado());
+                        if (incoming.getAutorizadoPor() != null && !incoming.getAutorizadoPor().isBlank()) existing.setAutorizadoPor(incoming.getAutorizadoPor());
+                        if (incoming.getAprobadoPor() != null && !incoming.getAprobadoPor().isBlank()) existing.setAprobadoPor(incoming.getAprobadoPor());
+                        if (incoming.getFechaAprobacion() != null && !incoming.getFechaAprobacion().isBlank()) existing.setFechaAprobacion(incoming.getFechaAprobacion());
+                        faenaRepository.save(existing);
+                    }, () -> faenaRepository.save(incoming));
+                }
                 contador += request.getFaenas().size();
                 response.getMensajes().add("Faenas sincronizadas: " + request.getFaenas().size());
             }
@@ -69,13 +105,23 @@ public class SyncService {
             }
 
             if (request.getBitacoras() != null && !request.getBitacoras().isEmpty()) {
-                bitacoraRepository.saveAll(request.getBitacoras());
+                for (BitacoraInmersion b : request.getBitacoras()) {
+                    if (b.getId() == null || b.getId().isBlank()) {
+                        b.setId("BIT-" + System.currentTimeMillis());
+                    }
+                    bitacoraRepository.save(b);
+                }
                 contador += request.getBitacoras().size();
                 response.getMensajes().add("Bitácoras post-inmersión sincronizadas: " + request.getBitacoras().size());
             }
 
             if (request.getChequeosMedicos() != null && !request.getChequeosMedicos().isEmpty()) {
-                chequeoMedicoRepository.saveAll(request.getChequeosMedicos());
+                for (ChequeoMedico c : request.getChequeosMedicos()) {
+                    if (c.getId() == null || c.getId().isBlank()) {
+                        c.setId("CH-" + System.currentTimeMillis());
+                    }
+                    chequeoMedicoRepository.save(c);
+                }
                 contador += request.getChequeosMedicos().size();
                 response.getMensajes().add("Chequeos médicos sincronizados: " + request.getChequeosMedicos().size());
             }

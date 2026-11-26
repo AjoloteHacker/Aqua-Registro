@@ -130,6 +130,7 @@ class HistorialViewModel(
     val uiState: StateFlow<HistorialUiState> = _uiState.asStateFlow()
 
     init {
+        repository.refrescarSiEsNecesario()
         // Se recalcula cuando cambian las faenas, la salud de los buzos, las revisiones de equipos,
         // la evidencia fotográfica, las etapas confirmadas o las encuestas de salud
         // (por ejemplo, al volver desde Equipos o Salud).

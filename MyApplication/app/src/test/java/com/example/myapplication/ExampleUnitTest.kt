@@ -157,6 +157,9 @@ class ExampleUnitTest {
 
         val buzosActuales = repository.buzos.value
         assertTrue(buzosActuales.any { it.rut == "19.999.888-9" })
+
+        // Limpieza para evitar dejar registros de prueba residuales en el repositorio/servidor
+        repository.eliminarBuzo(buzoId)
     }
 
     @Test

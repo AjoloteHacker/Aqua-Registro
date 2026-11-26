@@ -5,37 +5,37 @@ import com.google.gson.annotations.SerializedName
 // DTO para sincronización y comunicación con el backend Spring Boot
 
 data class BuzoDto(
-    @SerializedName("id") val id: String,
-    @SerializedName("rut") val rut: String,
-    @SerializedName("nombre") val nombre: String,
-    @SerializedName("empresa") val empresa: String?,
-    @SerializedName("matricula") val matricula: String?,
-    @SerializedName("telefono") val telefono: String?,
-    @SerializedName("edad") val edad: Int?,
-    @SerializedName("testEsfuerzoVigente") val testEsfuerzoVigente: Boolean?,
-    @SerializedName("examenPreocupacionalVigente") val examenPreocupacionalVigente: Boolean?,
-    @SerializedName("puntajeCalbuco") val puntajeCalbuco: Int?,
-    @SerializedName("estadoSalud") val estadoSalud: String?,
-    @SerializedName("ultimoChequeo") val ultimoChequeo: String?,
-    @SerializedName("fotoUrl") val fotoUrl: String?
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("rut") val rut: String? = null,
+    @SerializedName("nombre") val nombre: String? = null,
+    @SerializedName("empresa") val empresa: String? = null,
+    @SerializedName("matricula") val matricula: String? = null,
+    @SerializedName("telefono") val telefono: String? = null,
+    @SerializedName("edad") val edad: Int? = null,
+    @SerializedName("testEsfuerzoVigente") val testEsfuerzoVigente: Boolean? = null,
+    @SerializedName("examenPreocupacionalVigente") val examenPreocupacionalVigente: Boolean? = null,
+    @SerializedName("puntajeCalbuco") val puntajeCalbuco: Int? = null,
+    @SerializedName("estadoSalud") val estadoSalud: String? = null,
+    @SerializedName("ultimoChequeo") val ultimoChequeo: String? = null,
+    @SerializedName("fotoUrl") val fotoUrl: String? = null
 )
 
 data class FaenaDto(
-    @SerializedName("id") val id: String,
-    @SerializedName("buzoId") val buzoId: String,
-    @SerializedName("buzoNombre") val buzoNombre: String,
-    @SerializedName("socorristaId") val socorristaId: String = "",
-    @SerializedName("socorristaNombre") val socorristaNombre: String = "",
-    @SerializedName("empresa") val empresa: String?,
-    @SerializedName("centroCultivo") val centroCultivo: String?,
-    @SerializedName("tipoFaena") val tipoFaena: String?,
-    @SerializedName("profundidadMetros") val profundidadMetros: Int?,
-    @SerializedName("tiempoMinutos") val tiempoMinutos: Int?,
-    @SerializedName("fechaHora") val fechaHora: String?,
-    @SerializedName("estado") val estado: String?,
-    @SerializedName("autorizadoPor") val autorizadoPor: String?,
-    @SerializedName("aprobadoPor") val aprobadoPor: String?,
-    @SerializedName("fechaAprobacion") val fechaAprobacion: String?
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("buzoId") val buzoId: String? = null,
+    @SerializedName("buzoNombre") val buzoNombre: String? = null,
+    @SerializedName("socorristaId") val socorristaId: String? = null,
+    @SerializedName("socorristaNombre") val socorristaNombre: String? = null,
+    @SerializedName("empresa") val empresa: String? = null,
+    @SerializedName("centroCultivo") val centroCultivo: String? = null,
+    @SerializedName("tipoFaena") val tipoFaena: String? = null,
+    @SerializedName("profundidadMetros") val profundidadMetros: Int? = null,
+    @SerializedName("tiempoMinutos") val tiempoMinutos: Int? = null,
+    @SerializedName("fechaHora") val fechaHora: String? = null,
+    @SerializedName("estado") val estado: String? = null,
+    @SerializedName("autorizadoPor") val autorizadoPor: String? = null,
+    @SerializedName("aprobadoPor") val aprobadoPor: String? = null,
+    @SerializedName("fechaAprobacion") val fechaAprobacion: String? = null
 )
 
 data class ValidacionPreChequeoRequestDto(
@@ -93,12 +93,32 @@ data class EvidenciaFotograficaDto(
     @SerializedName("observaciones") val observaciones: String?
 )
 
+data class ChequeoMedicoDto(
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("faenaId") val faenaId: String? = null,
+    @SerializedName("buzoRut") val buzoRut: String? = null,
+    @SerializedName("buzoNombre") val buzoNombre: String? = null,
+    @SerializedName("momento") val momento: String? = null,
+    @SerializedName("fechaHora") val fechaHora: String? = null,
+    @SerializedName("esApto") val esApto: Boolean? = null,
+    @SerializedName("presionArterial") val presionArterial: String? = null,
+    @SerializedName("frecuenciaCardiaca") val frecuenciaCardiaca: Int? = null,
+    @SerializedName("pesoKg") val pesoKg: Double? = null,
+    @SerializedName("tallaM") val tallaM: Double? = null,
+    @SerializedName("imc") val imc: Double? = null,
+    @SerializedName("colesterolTotal") val colesterolTotal: Int? = null,
+    @SerializedName("glicemiaBasal") val glicemiaBasal: Int? = null,
+    @SerializedName("evaluadoPor") val evaluadoPor: String? = null,
+    @SerializedName("observaciones") val observaciones: String? = null
+)
+
 data class SyncBatchRequestDto(
     @SerializedName("dispositivoOrigenId") val dispositivoOrigenId: String,
     @SerializedName("buzos") val buzos: List<BuzoDto> = emptyList(),
     @SerializedName("faenas") val faenas: List<FaenaDto> = emptyList(),
     @SerializedName("bitacoras") val bitacoras: List<BitacoraInmersionDto> = emptyList(),
-    @SerializedName("evidencias") val evidencias: List<EvidenciaFotograficaDto> = emptyList()
+    @SerializedName("evidencias") val evidencias: List<EvidenciaFotograficaDto> = emptyList(),
+    @SerializedName("chequeosMedicos") val chequeosMedicos: List<ChequeoMedicoDto> = emptyList()
 )
 
 data class SyncBatchResponseDto(

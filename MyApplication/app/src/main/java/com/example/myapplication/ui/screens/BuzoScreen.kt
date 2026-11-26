@@ -24,10 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -221,7 +219,7 @@ fun BuzoScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(uiState.buzosFiltrados, key = { it.id }) { buzo ->
+                    items(uiState.buzosFiltrados, key = { "${it.id}_${it.rut}" }) { buzo ->
                         BuzoCard(
                             buzo = buzo,
                             onClick = { viewModel.openDetalle(buzo) },
@@ -528,45 +526,12 @@ fun RegistrarEditarBuzoDialogs(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    var rutFieldValue by remember(uiState.showAddDialog, uiState.buzoAEditar) {
-                        mutableStateOf(
-                            TextFieldValue(
-                                text = uiState.nuevoRut,
-                                selection = TextRange(uiState.nuevoRut.length)
-                            )
-                        )
-                    }
-                    LaunchedEffect(uiState.nuevoRut) {
-                        if (rutFieldValue.text != uiState.nuevoRut) {
-                            rutFieldValue = TextFieldValue(
-                                text = uiState.nuevoRut,
-                                selection = TextRange(uiState.nuevoRut.length)
-                            )
-                        }
-                    }
-
                     OutlinedTextField(
-                        value = rutFieldValue,
-                        onValueChange = { newValue ->
-                            // Si el usuario borra el guion con backspace, eliminamos el último carácter real del RUT
-                            val textoEntrada = if (
-                                rutFieldValue.text.contains('-') &&
-                                !newValue.text.contains('-') &&
-                                newValue.text.length == rutFieldValue.text.length - 1
-                            ) {
-                                uiState.nuevoRut.filter { it.isDigit() || it.equals('k', ignoreCase = true) }.dropLast(1)
-                            } else {
-                                newValue.text
-                            }
-                            viewModel.onNuevoRutChange(textoEntrada)
-                            val formateado = com.example.myapplication.util.Rutificador.formatearEnVivo(textoEntrada)
-                            rutFieldValue = TextFieldValue(
-                                text = formateado,
-                                selection = TextRange(formateado.length)
-                            )
-                        },
+                        value = uiState.nuevoRut,
+                        onValueChange = { viewModel.onNuevoRutChange(it) },
                         label = { Text("RUT (ej: 18.234.567-8) *") },
                         leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -814,45 +779,9 @@ fun RegistrarEditarBuzoDialogs(
                         }
                     }
 
-                    var telefonoFieldValue by remember(uiState.showAddDialog, uiState.buzoAEditar, uiState.paisTelefono) {
-                        mutableStateOf(
-                            TextFieldValue(
-                                text = uiState.nuevoTelefono,
-                                selection = TextRange(uiState.nuevoTelefono.length)
-                            )
-                        )
-                    }
-                    LaunchedEffect(uiState.nuevoTelefono) {
-                        if (telefonoFieldValue.text != uiState.nuevoTelefono) {
-                            telefonoFieldValue = TextFieldValue(
-                                text = uiState.nuevoTelefono,
-                                selection = TextRange(uiState.nuevoTelefono.length)
-                            )
-                        }
-                    }
-
                     OutlinedTextField(
-                        value = telefonoFieldValue,
-                        onValueChange = { newValue ->
-                            val digitosPrevios = uiState.paisTelefono.extraerDigitosLocales(telefonoFieldValue.text)
-                            val digitosNuevos = uiState.paisTelefono.extraerDigitosLocales(newValue.text)
-                            // Si el usuario presionó borrar sobre un espacio del formato, borramos el último dígito
-                            val entradaFinal = if (
-                                newValue.text.length < telefonoFieldValue.text.length &&
-                                digitosNuevos == digitosPrevios &&
-                                digitosPrevios.isNotEmpty()
-                            ) {
-                                digitosPrevios.dropLast(1)
-                            } else {
-                                newValue.text
-                            }
-                            viewModel.onNuevoTelefonoChange(entradaFinal)
-                            val formateado = uiState.paisTelefono.formatearNumero(entradaFinal)
-                            telefonoFieldValue = TextFieldValue(
-                                text = formateado,
-                                selection = TextRange(formateado.length)
-                            )
-                        },
+                        value = uiState.nuevoTelefono,
+                        onValueChange = { viewModel.onNuevoTelefonoChange(it) },
                         label = { Text("Teléfono de Contacto (${uiState.paisTelefono.prefijo})") },
                         placeholder = { Text("${uiState.paisTelefono.prefijo} 9 8451 2290") },
                         leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },

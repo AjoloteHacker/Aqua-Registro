@@ -87,6 +87,7 @@ class BuzoViewModel(
     val uiState: StateFlow<BuzoUiState> = _uiState.asStateFlow()
 
     init {
+        repository.refrescarSiEsNecesario()
         viewModelScope.launch {
             repository.buzos.collect { lista ->
                 _uiState.update { state ->
@@ -249,7 +250,20 @@ class BuzoViewModel(
 
     fun onNuevoNombreChange(v: String) = _uiState.update { it.copy(nuevoNombre = v, error = null) }
     fun onNuevoRutChange(v: String) {
-        val filtrado = v.filter { it.isDigit() || it.equals('k', ignoreCase = true) || it == '.' || it == '-' }
+        val actual = _uiState.value.nuevoRut
+        // Si el usuario borró un punto o guión, eliminamos el carácter anterior real
+        val textoLimpio = if (v.length < actual.length) {
+            val digitosActuales = actual.filter { it.isDigit() || it.equals('k', ignoreCase = true) }
+            val digitosNuevos = v.filter { it.isDigit() || it.equals('k', ignoreCase = true) }
+            if (digitosActuales == digitosNuevos && digitosActuales.isNotEmpty()) {
+                digitosActuales.dropLast(1)
+            } else {
+                v
+            }
+        } else {
+            v
+        }
+        val filtrado = textoLimpio.filter { it.isDigit() || it.equals('k', ignoreCase = true) || it == '.' || it == '-' }
         val autoFormateado = Rutificador.formatearEnVivo(filtrado)
         _uiState.update { it.copy(nuevoRut = autoFormateado, error = null) }
     }
@@ -262,7 +276,20 @@ class BuzoViewModel(
     fun onNuevaCategoriaChange(v: String) = _uiState.update { it.copy(nuevaCategoria = v, error = null) }
     fun onNuevoTelefonoChange(v: String) {
         val pais = _uiState.value.paisTelefono
-        val formateado = pais.formatearNumero(v)
+        val actual = _uiState.value.nuevoTelefono
+        val digitosPrevios = pais.extraerDigitosLocales(actual)
+        val digitosNuevos = pais.extraerDigitosLocales(v)
+        // Si el usuario borró sobre un espacio o prefijo, eliminamos el último dígito
+        val entradaFinal = if (
+            v.length < actual.length &&
+            digitosNuevos == digitosPrevios &&
+            digitosPrevios.isNotEmpty()
+        ) {
+            digitosPrevios.dropLast(1)
+        } else {
+            v
+        }
+        val formateado = pais.formatearNumero(entradaFinal)
         _uiState.update { it.copy(nuevoTelefono = formateado, error = null) }
     }
     fun onPaisTelefonoChange(pais: PaisTelefono) {
@@ -373,7 +400,7 @@ class BuzoViewModel(
         if (buzoAEditar == null) {
             // MODO CREAR
             val nuevo = Buzo(
-                id = (state.buzos.size + 1).toString(),
+                id = "B-${System.currentTimeMillis()}",
                 rut = rutFormateado,
                 nombre = state.nuevoNombre.trim(),
                 empresa = empresaFinal,

@@ -1,6 +1,7 @@
 package com.example.myapplication.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.example.myapplication.data.Chequeo
 import com.example.myapplication.data.local.AppDatabase
 import com.example.myapplication.data.local.entity.BuzoEntity
@@ -473,35 +474,6 @@ class AquaRepository private constructor() {
         networkMonitor = netMonitor
 
         coroutineScope.launch {
-            runCatching {
-                val guardada = SessionDataStore(context.applicationContext).serverUrlFlow.firstOrNull()
-                if (!guardada.isNullOrBlank()) {
-                    val normalizada = RetrofitClient.actualizarBaseUrl(guardada)
-                    _serverUrl.value = normalizada
-                }
-            }
-            netMonitor.isConnected.collect { onlineSistema ->
-                val online = if (modoOfflineForzado) false else onlineSistema
-                _isNetworkConnected.value = online
-                if (online) {
-                    _syncStatus.value = "En línea · Sincronizando..."
-                    appContext?.let { SyncWorker.encolarSincronizacion(it) }
-                    probarConexionServidor()
-                    sincronizarConBackend()
-                    consultarClimaMaritimo(centrosCultivo.first())
-                } else {
-                    _servidorOnline.value = false
-                    val cant = _pendientesSincronizarIds.value.size
-                    _syncStatus.value = if (cant > 0) {
-                        "Modo offline · Pendiente de sincronizar ($cant)"
-                    } else {
-                        "Modo offline · Guardando en Room"
-                    }
-                }
-            }
-        }
-
-        coroutineScope.launch {
             val buzoDao = db.buzoDao()
             val faenaDao = db.faenaDao()
             val empresaDao = db.empresaDao()
@@ -573,6 +545,36 @@ class AquaRepository private constructor() {
                     faenaDao.insertOrUpdateEncuestaSalud(EncuestaSaludEntity.fromDomain(enc))
                 }
             }
+
+            // 7. Cargar URL configurada del servidor desde SessionDataStore
+            runCatching {
+                val guardada = SessionDataStore(context.applicationContext).serverUrlFlow.firstOrNull()
+                if (!guardada.isNullOrBlank()) {
+                    val normalizada = RetrofitClient.actualizarBaseUrl(guardada)
+                    _serverUrl.value = normalizada
+                }
+            }
+
+            // 8. Iniciar monitoreo de red nativo y sincronización inicial
+            netMonitor.isConnected.collect { onlineSistema ->
+                val online = if (modoOfflineForzado) false else onlineSistema
+                _isNetworkConnected.value = online
+                if (online) {
+                    _syncStatus.value = "En línea · Sincronizando..."
+                    appContext?.let { SyncWorker.encolarSincronizacion(it) }
+                    probarConexionServidor()
+                    sincronizarConBackend()
+                    consultarClimaMaritimo(centrosCultivo.first())
+                } else {
+                    _servidorOnline.value = false
+                    val cant = _pendientesSincronizarIds.value.size
+                    _syncStatus.value = if (cant > 0) {
+                        "Modo offline · Pendiente de sincronizar ($cant)"
+                    } else {
+                        "Modo offline · Guardando en Room"
+                    }
+                }
+            }
         }
     }
 
@@ -638,7 +640,7 @@ class AquaRepository private constructor() {
         if (existe) {
             return Result.failure(IllegalArgumentException("Ya existe un buzo registrado con el RUT ${buzo.rut}"))
         }
-        val buzoConId = if (buzo.id.isBlank()) buzo.copy(id = (_buzos.value.size + 1).toString()) else buzo
+        val buzoConId = if (buzo.id.isBlank()) buzo.copy(id = "B-${System.currentTimeMillis()}") else buzo
         val buzoFormateado = buzoConId.copy(
             rut = Rutificador.formatear(buzo.rut),
             nombre = buzo.nombre.trim()
@@ -735,9 +737,17 @@ class AquaRepository private constructor() {
         _buzos.update { lista -> lista.filterNot { it.id == buzoId } }
         _equiposPorBuzo.update { map -> map - buzoId }
 
-        // Eliminar en Room (SQLite)
+        // Eliminar en Room (SQLite) y sincronizar eliminación con ajoloserver vía API REST
         coroutineScope.launch {
             database?.buzoDao()?.deleteById(buzoId)
+            try {
+                val resp = RetrofitClient.aquaApi.deleteBuzo(buzoId)
+                if (!resp.isSuccessful && buzo.rut.isNotBlank()) {
+                    RetrofitClient.aquaApi.deleteBuzo(buzo.rut)
+                }
+            } catch (e: Exception) {
+                Log.w("AquaRepository", "No se pudo sincronizar eliminación de buzo $buzoId en servidor: ${e.message}")
+            }
         }
 
         return Result.success(Unit)
@@ -1259,7 +1269,7 @@ class AquaRepository private constructor() {
             return
         }
         coroutineScope.launch {
-            _ultimoPingDetalle.value = "Haciendo ping a ${_serverUrl.value}..."
+            _ultimoPingDetalle.value = "Comprobando conexión con el servidor..."
             val inicio = System.currentTimeMillis()
             try {
                 val resp = RetrofitClient.aquaApi.getSyncStatus()
@@ -1278,14 +1288,30 @@ class AquaRepository private constructor() {
         }
     }
 
+    @Volatile
+    private var ultimoSyncTimestamp: Long = 0L
+
+    /**
+     * Refresca los datos en segundo plano desde el servidor si hay conexión activa,
+     * limitando las llamadas automáticas a máximo una cada 4 segundos.
+     */
+    fun refrescarSiEsNecesario() {
+        if (!_isNetworkConnected.value || modoOfflineForzado) return
+        val ahora = System.currentTimeMillis()
+        if (ahora - ultimoSyncTimestamp > 4000L) {
+            ultimoSyncTimestamp = ahora
+            sincronizarConBackend()
+        }
+    }
+
     /**
      * Sincronización bidireccional (POST + GET) entre Room/StateFlow y el backend Spring Boot:
-     * 1. Si hay cambios locales pendientes en cola, los envía vía POST /api/sync/batch.
-     * 2. Descarga buzos (GET /api/buzos) y faenas (GET /api/faenas) para reflejar al instante
-     *    cualquier operación ejecutada en Swagger UI (EA5 Paso 3).
+     * 1. Si hay cambios locales pendientes en cola, los envía vía POST /api/sync/batch (solo los pendientes).
+     * 2. Descarga buzos, faenas, bitácoras y chequeos para reflejar al instante
+     *    cualquier operación ejecutada en el servidor u otros dispositivos.
      */
     fun sincronizarConBackend() {
-        if (!_isNetworkConnected.value) {
+        if (!_isNetworkConnected.value || modoOfflineForzado) {
             val cant = _pendientesSincronizarIds.value.size
             _syncStatus.value = if (cant > 0) {
                 "Modo offline · Pendiente de sincronizar ($cant)"
@@ -1297,80 +1323,119 @@ class AquaRepository private constructor() {
 
         coroutineScope.launch {
             try {
-                val teniaPendientes = _pendientesSincronizarIds.value.isNotEmpty()
-                if (teniaPendientes) {
-                    val buzosDto = _buzos.value.map { b ->
-                        BuzoDto(
-                            id = b.id,
-                            rut = b.rut,
-                            nombre = b.nombre,
-                            empresa = b.empresa,
-                            matricula = b.matricula,
-                            telefono = b.telefono,
-                            edad = b.edadAnios,
-                            testEsfuerzoVigente = b.testEsfuerzoVigente,
-                            examenPreocupacionalVigente = b.examenPreocupacionalVigente,
-                            puntajeCalbuco = b.puntajeCalbuco,
-                            estadoSalud = b.estadoSalud.name,
-                            ultimoChequeo = b.ultimoChequeo,
-                            fotoUrl = b.fotoUrl
+                val pendientesActuales = _pendientesSincronizarIds.value
+                if (pendientesActuales.isNotEmpty()) {
+                    val buzosDto = _buzos.value
+                        .filter { it.id in pendientesActuales }
+                        .map { b ->
+                            BuzoDto(
+                                id = b.id,
+                                rut = b.rut,
+                                nombre = b.nombre,
+                                empresa = b.empresa,
+                                matricula = b.matricula,
+                                telefono = b.telefono,
+                                edad = b.edadAnios,
+                                testEsfuerzoVigente = b.testEsfuerzoVigente,
+                                examenPreocupacionalVigente = b.examenPreocupacionalVigente,
+                                puntajeCalbuco = b.puntajeCalbuco,
+                                estadoSalud = b.estadoSalud.name,
+                                ultimoChequeo = b.ultimoChequeo,
+                                fotoUrl = b.fotoUrl
+                            )
+                        }
+
+                    val faenasDto = _faenas.value
+                        .filter { it.id in pendientesActuales }
+                        .map { f ->
+                            FaenaDto(
+                                id = f.id,
+                                buzoId = f.buzoId,
+                                buzoNombre = f.buzoNombre,
+                                socorristaId = f.socorristaId,
+                                socorristaNombre = f.socorristaNombre,
+                                empresa = f.empresa,
+                                centroCultivo = f.centroCultivo,
+                                tipoFaena = f.tipoFaena,
+                                profundidadMetros = f.profundidadMetros,
+                                tiempoMinutos = f.tiempoMinutos,
+                                fechaHora = f.fechaHora,
+                                estado = f.estado,
+                                autorizadoPor = f.autorizadoPor,
+                                aprobadoPor = f.aprobacion?.aprobadoPor,
+                                fechaAprobacion = f.aprobacion?.fechaHora
+                            )
+                        }
+
+                    val bitacorasDto = _bitacorasPostInmersion.value
+                        .filter { it.id in pendientesActuales || it.faenaId in pendientesActuales }
+                        .map { b ->
+                            BitacoraInmersionDto(
+                                id = b.id,
+                                faenaId = b.faenaId,
+                                buzoId = b.buzoId,
+                                buzoNombre = b.buzoNombre,
+                                fechaHora = b.fechaHora,
+                                profundidadMetros = b.profundidadMetros,
+                                tiempoFondoMinutos = b.tiempoFondoMinutos,
+                                velocidadDescensoMpm = b.velocidadDescensoMpm,
+                                velocidadAscensoMpm = b.velocidadAscensoMpm,
+                                alertaVelocidadSuperada = b.alertaVelocidadSuperada,
+                                detalleAlerta = b.detalleAlerta,
+                                registradoPor = b.registradoPor,
+                                observaciones = b.observaciones
+                            )
+                        }
+
+                    val chequeosDto = _historialMedico.value
+                        .filter { it.id in pendientesActuales }
+                        .map { c ->
+                            ChequeoMedicoDto(
+                                id = c.id,
+                                faenaId = c.faenaId,
+                                buzoRut = c.buzoRut,
+                                buzoNombre = c.buzoNombre,
+                                momento = c.momento,
+                                fechaHora = c.fechaHora,
+                                esApto = c.esApto,
+                                presionArterial = c.presionArterial,
+                                frecuenciaCardiaca = c.frecuenciaCardiaca,
+                                colesterolTotal = c.colesterolTotal,
+                                glicemiaBasal = c.glicemiaBasal,
+                                evaluadoPor = c.evaluadoPor
+                            )
+                        }
+
+                    if (buzosDto.isNotEmpty() || faenasDto.isNotEmpty() || bitacorasDto.isNotEmpty() || chequeosDto.isNotEmpty()) {
+                        val respBatch = RetrofitClient.aquaApi.syncBatch(
+                            SyncBatchRequestDto(
+                                dispositivoOrigenId = "Android-AquaCheck",
+                                buzos = buzosDto,
+                                faenas = faenasDto,
+                                bitacoras = bitacorasDto,
+                                chequeosMedicos = chequeosDto
+                            )
                         )
+                        if (respBatch.isSuccessful && respBatch.body()?.estado == "EXITO") {
+                            _pendientesSincronizarIds.update { it - pendientesActuales }
+                        }
                     }
-                    val faenasDto = _faenas.value.map { f ->
-                        FaenaDto(
-                            id = f.id,
-                            buzoId = f.buzoId,
-                            buzoNombre = f.buzoNombre,
-                            socorristaId = f.socorristaId,
-                            socorristaNombre = f.socorristaNombre,
-                            empresa = f.empresa,
-                            centroCultivo = f.centroCultivo,
-                            tipoFaena = f.tipoFaena,
-                            profundidadMetros = f.profundidadMetros,
-                            tiempoMinutos = f.tiempoMinutos,
-                            fechaHora = f.fechaHora,
-                            estado = f.estado,
-                            autorizadoPor = f.autorizadoPor,
-                            aprobadoPor = f.aprobacion?.aprobadoPor,
-                            fechaAprobacion = f.aprobacion?.fechaHora
-                        )
-                    }
-                    val bitacorasDto = _bitacorasPostInmersion.value.map { b ->
-                        BitacoraInmersionDto(
-                            id = b.id,
-                            faenaId = b.faenaId,
-                            buzoId = b.buzoId,
-                            buzoNombre = b.buzoNombre,
-                            fechaHora = b.fechaHora,
-                            profundidadMetros = b.profundidadMetros,
-                            tiempoFondoMinutos = b.tiempoFondoMinutos,
-                            velocidadDescensoMpm = b.velocidadDescensoMpm,
-                            velocidadAscensoMpm = b.velocidadAscensoMpm,
-                            alertaVelocidadSuperada = b.alertaVelocidadSuperada,
-                            detalleAlerta = b.detalleAlerta,
-                            registradoPor = b.registradoPor,
-                            observaciones = b.observaciones
-                        )
-                    }
-                    RetrofitClient.aquaApi.syncBatch(
-                        SyncBatchRequestDto(
-                            dispositivoOrigenId = "Android-AquaCheck",
-                            buzos = buzosDto,
-                            faenas = faenasDto,
-                            bitacoras = bitacorasDto
-                        )
-                    )
                 }
 
-                // Descargar cambios realizados desde Swagger UI (GET /api/buzos y GET /api/faenas)
+                // Descargar cambios realizados desde el servidor (Buzos, Faenas, Bitácoras y Chequeos)
                 val respBuzos = RetrofitClient.aquaApi.getBuzos()
                 val respFaenas = RetrofitClient.aquaApi.getFaenas()
+                val respBitacoras = runCatching { RetrofitClient.aquaApi.getBitacoras() }.getOrNull()
+                val respChequeos = runCatching { RetrofitClient.aquaApi.getChequeosMedicos() }.getOrNull()
 
                 if (respBuzos.isSuccessful && !respBuzos.body().isNullOrEmpty()) {
                     val remotos = respBuzos.body()!!
                     val localesPorId = _buzos.value.associateBy { it.id }
-                    val buzosCombinados = remotos.map { dto ->
-                        val local = localesPorId[dto.id]
+                    val buzosCombinados = remotos.mapNotNull { dto ->
+                        val id = dto.id ?: return@mapNotNull null
+                        val rut = dto.rut ?: return@mapNotNull null
+                        val nombre = dto.nombre ?: return@mapNotNull null
+                        val local = localesPorId[id]
                         val estadoSalud = runCatching {
                             EstadoSalud.valueOf(dto.estadoSalud ?: "")
                         }.getOrElse { local?.estadoSalud ?: EstadoSalud.PENDIENTE }
@@ -1381,14 +1446,14 @@ class AquaRepository private constructor() {
                             else -> LocalDate.of(1990, 1, 1)
                         }
                         Buzo(
-                            id = dto.id,
-                            rut = dto.rut,
-                            nombre = dto.nombre,
+                            id = id,
+                            rut = rut,
+                            nombre = nombre,
                             empresa = dto.empresa ?: local?.empresa ?: "Empresa Contratista",
                             matricula = dto.matricula ?: local?.matricula ?: "Buzo Comercial",
                             telefono = dto.telefono ?: local?.telefono ?: "+56 9 9000 0000",
                             estadoSalud = estadoSalud,
-                            ultimoChequeo = dto.ultimoChequeo ?: local?.ultimoChequeo ?: "Sincronizado desde Swagger",
+                            ultimoChequeo = dto.ultimoChequeo ?: local?.ultimoChequeo ?: "Sincronizado desde Servidor",
                             categoria = local?.categoria ?: "Buzo Comercial",
                             vigenciaMatricula = local?.vigenciaMatricula ?: "Al día",
                             fotoUrl = dto.fotoUrl ?: local?.fotoUrl,
@@ -1399,27 +1464,39 @@ class AquaRepository private constructor() {
                             edad = fechaNac,
                             testEsfuerzoVigente = dto.testEsfuerzoVigente ?: local?.testEsfuerzoVigente ?: true,
                             examenPreocupacionalVigente = dto.examenPreocupacionalVigente ?: local?.examenPreocupacionalVigente ?: true,
-                            puntajeCalbuco = dto.puntajeCalbuco ?: local?.puntajeCalbuco ?: 90
+                            puntajeCalbuco = dto.puntajeCalbuco ?: local?.puntajeCalbuco ?: 90,
+                            certificadoAchsUri = local?.certificadoAchsUri,
+                            fechaVencimientoMatricula = local?.fechaVencimientoMatricula,
+                            alertaMatriculaNoInvasiva = local?.alertaMatriculaNoInvasiva ?: false
                         )
                     }
-                    // Conservar también cualquier buzo local aún no presente en remoto
                     val idsRemotos = buzosCombinados.map { it.id }.toSet()
-                    val soloLocales = _buzos.value.filterNot { it.id in idsRemotos }
-                    val listaFinalBuzos = buzosCombinados + soloLocales
+                    val soloLocalesPendientes = _buzos.value.filter { it.id !in idsRemotos && it.id in _pendientesSincronizarIds.value }
+                    val listaFinalBuzos = buzosCombinados + soloLocalesPendientes
                     _buzos.value = listaFinalBuzos
-                    database?.buzoDao()?.insertAll(listaFinalBuzos.map { BuzoEntity.fromDomain(it) })
+                    database?.buzoDao()?.let { dao ->
+                        dao.insertAll(listaFinalBuzos.map { BuzoEntity.fromDomain(it) })
+                        val eliminados = _buzos.value.filter { it.id !in idsRemotos && it.id !in _pendientesSincronizarIds.value }
+                        eliminados.forEach { dao.deleteById(it.id) }
+                    }
                 }
 
                 if (respFaenas.isSuccessful && !respFaenas.body().isNullOrEmpty()) {
                     val remotos = respFaenas.body()!!
                     val localesPorId = _faenas.value.associateBy { it.id }
-                    val faenasCombinadas = remotos.map { dto ->
-                        val local = localesPorId[dto.id]
+                    val faenasCombinadas = remotos.mapNotNull { dto ->
+                        val id = dto.id ?: return@mapNotNull null
+                        val local = localesPorId[id]
+                        val rawEstado = dto.estado.orEmpty()
                         val estadoNormalizado = when {
-                            dto.estado.equals("COMPLETADA", ignoreCase = true) ||
-                                dto.estado?.contains("Completada", ignoreCase = true) == true ->
+                            rawEstado.contains("Completada", ignoreCase = true) ->
                                 RegistroFaena.ESTADO_COMPLETADA
-                            else -> RegistroFaena.ESTADO_EN_CURSO
+                            rawEstado.contains("sin Terminar", ignoreCase = true) || rawEstado.contains("Cerrada", ignoreCase = true) ->
+                                RegistroFaena.ESTADO_SIN_TERMINAR
+                            rawEstado.contains("Curso", ignoreCase = true) ->
+                                RegistroFaena.ESTADO_EN_CURSO
+                            rawEstado.isNotBlank() -> rawEstado
+                            else -> local?.estado ?: RegistroFaena.ESTADO_EN_CURSO
                         }
                         val aprobacion = if (!dto.aprobadoPor.isNullOrBlank()) {
                             AprobacionDatos(
@@ -1428,19 +1505,24 @@ class AquaRepository private constructor() {
                             )
                         } else local?.aprobacion
 
-                        val socorristaId = dto.socorristaId.ifBlank {
-                            local?.socorristaId?.ifBlank { null }
-                                ?: _buzos.value.firstOrNull { it.id != dto.buzoId }?.id.orEmpty()
-                        }
-                        val socorristaNombre = dto.socorristaNombre.ifBlank {
-                            local?.socorristaNombre?.ifBlank { null }
-                                ?: _buzos.value.firstOrNull { it.id == socorristaId }?.nombre.orEmpty()
-                        }
+                        val buzoId = dto.buzoId?.ifBlank { null } ?: local?.buzoId ?: "1"
+                        val buzoNombre = dto.buzoNombre?.ifBlank { null }
+                            ?: local?.buzoNombre
+                            ?: _buzos.value.firstOrNull { it.id == buzoId }?.nombre
+                            ?: "Buzo"
+
+                        val socorristaId = dto.socorristaId?.ifBlank { null }
+                            ?: local?.socorristaId?.ifBlank { null }
+                            ?: _buzos.value.firstOrNull { it.id != buzoId }?.id.orEmpty()
+
+                        val socorristaNombre = dto.socorristaNombre?.ifBlank { null }
+                            ?: local?.socorristaNombre?.ifBlank { null }
+                            ?: _buzos.value.firstOrNull { it.id == socorristaId }?.nombre.orEmpty()
 
                         RegistroFaena(
-                            id = dto.id,
-                            buzoId = dto.buzoId,
-                            buzoNombre = dto.buzoNombre,
+                            id = id,
+                            buzoId = buzoId,
+                            buzoNombre = buzoNombre,
                             socorristaId = socorristaId,
                             socorristaNombre = socorristaNombre,
                             empresa = dto.empresa ?: local?.empresa ?: "Servicios Submarinos Austral SpA",
@@ -1451,19 +1533,90 @@ class AquaRepository private constructor() {
                             fechaHora = dto.fechaHora ?: local?.fechaHora ?: obtenerFechaHoraActual(),
                             estado = estadoNormalizado,
                             autorizadoPor = dto.autorizadoPor ?: local?.autorizadoPor ?: "Cristóbal Loncón C.",
-                            aprobacion = aprobacion
+                            aprobacion = aprobacion,
+                            cierreSinTerminar = local?.cierreSinTerminar
                         )
                     }
                     val idsRemotos = faenasCombinadas.map { it.id }.toSet()
-                    val soloLocales = _faenas.value.filterNot { it.id in idsRemotos }
-                    val listaFinalFaenas = faenasCombinadas + soloLocales
+                    val soloLocalesPendientes = _faenas.value.filter { it.id !in idsRemotos && it.id in _pendientesSincronizarIds.value }
+                    val listaFinalFaenas = faenasCombinadas + soloLocalesPendientes
                     _faenas.value = listaFinalFaenas
                     database?.faenaDao()?.insertAll(listaFinalFaenas.map { FaenaEntity.fromDomain(it) })
                 }
 
+                if (respBitacoras != null && respBitacoras.isSuccessful && !respBitacoras.body().isNullOrEmpty()) {
+                    val remotos = respBitacoras.body()!!
+                    val localesPorId = _bitacorasPostInmersion.value.associateBy { it.id }
+                    val bitacorasCombinadas = remotos.mapNotNull { dto ->
+                        val id = dto.id ?: return@mapNotNull null
+                        val local = localesPorId[id]
+                        BitacoraPostInmersion(
+                            id = id,
+                            faenaId = dto.faenaId,
+                            buzoId = dto.buzoId,
+                            buzoNombre = dto.buzoNombre,
+                            fechaHora = dto.fechaHora ?: local?.fechaHora ?: obtenerFechaHoraActual(),
+                            profundidadMetros = dto.profundidadMetros,
+                            tiempoFondoMinutos = dto.tiempoFondoMinutos,
+                            velocidadDescensoMpm = dto.velocidadDescensoMpm,
+                            velocidadAscensoMpm = dto.velocidadAscensoMpm,
+                            origenDato = local?.origenDato ?: "Servidor AquaCheck",
+                            observaciones = dto.observaciones ?: local?.observaciones ?: "",
+                            registradoPor = dto.registradoPor ?: local?.registradoPor ?: "Prevencionista"
+                        )
+                    }
+                    val idsRemotos = bitacorasCombinadas.map { it.id }.toSet()
+                    val soloLocales = _bitacorasPostInmersion.value.filterNot { it.id in idsRemotos }
+                    _bitacorasPostInmersion.value = bitacorasCombinadas + soloLocales
+                }
+
+                if (respChequeos != null && respChequeos.isSuccessful && !respChequeos.body().isNullOrEmpty()) {
+                    val remotos = respChequeos.body()!!
+                    val localesPorId = _historialMedico.value.associateBy { it.id }
+                    val chequeosCombinados = remotos.mapNotNull { dto ->
+                        val id = dto.id ?: return@mapNotNull null
+                        val local = localesPorId[id]
+                        val buzoRut = dto.buzoRut ?: local?.buzoRut ?: return@mapNotNull null
+                        val buzoNombre = dto.buzoNombre ?: local?.buzoNombre ?: "Buzo"
+                        val faenaId = dto.faenaId ?: local?.faenaId ?: ""
+                        val momento = dto.momento ?: local?.momento ?: "ANTES"
+                        val fechaHora = dto.fechaHora ?: local?.fechaHora ?: obtenerFechaHoraActual()
+                        val esApto = dto.esApto ?: local?.esApto ?: true
+                        val presionArterial = dto.presionArterial ?: local?.presionArterial ?: "120/80"
+                        val frecuenciaCardiaca = dto.frecuenciaCardiaca ?: local?.frecuenciaCardiaca ?: 70
+                        val colesterol = dto.colesterolTotal ?: local?.colesterolTotal ?: 180
+                        val glicemia = dto.glicemiaBasal ?: local?.glicemiaBasal ?: 90
+                        val evaluadoPor = dto.evaluadoPor ?: local?.evaluadoPor ?: "Prevencionista"
+
+                        Chequeo(
+                            id = id,
+                            buzoRut = buzoRut,
+                            buzoNombre = buzoNombre,
+                            faenaId = faenaId,
+                            momento = momento,
+                            fechaHora = fechaHora,
+                            fecha = local?.fecha ?: LocalDate.now(),
+                            esApto = esApto,
+                            colesterolTotal = colesterol,
+                            hdl = local?.hdl ?: 45,
+                            ldl = local?.ldl ?: 110,
+                            trigliceridos = local?.trigliceridos ?: 130,
+                            hemograma = local?.hemograma ?: true,
+                            glicemiaBasal = glicemia,
+                            presionArterial = presionArterial,
+                            frecuenciaCardiaca = frecuenciaCardiaca,
+                            evaluadoPor = evaluadoPor
+                        )
+                    }
+                    val idsRemotos = chequeosCombinados.map { it.id }.toSet()
+                    val soloLocales = _historialMedico.value.filterNot { it.id in idsRemotos }
+                    val listaFinalChequeos = chequeosCombinados + soloLocales
+                    _historialMedico.value = listaFinalChequeos
+                    database?.chequeoDao()?.insertAll(listaFinalChequeos.map { ChequeoEntity.fromDomain(it) })
+                }
+
                 if (respBuzos.isSuccessful || respFaenas.isSuccessful) {
                     _servidorOnline.value = true
-                    _pendientesSincronizarIds.value = emptySet()
                     val hora = obtenerFechaHoraActual()
                     _syncStatus.value = "Sincronizado ($hora)"
                     _ultimoPingDetalle.value = "Sincronización bidireccional exitosa ($hora)"
@@ -1477,7 +1630,8 @@ class AquaRepository private constructor() {
                         "Sincronizado localmente con Room SQLite"
                     }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w("AquaRepository", "Error durante sincronización: ${e.message}", e)
                 _servidorOnline.value = false
                 val cant = _pendientesSincronizarIds.value.size
                 _syncStatus.value = if (cant > 0) {
@@ -1493,7 +1647,7 @@ class AquaRepository private constructor() {
      * Fuerza la sincronización inmediata bidireccional (POST + GET) con Spring Boot y WorkManager.
      */
     fun sincronizarAhora() {
-        if (_isNetworkConnected.value) {
+        if (_isNetworkConnected.value && !modoOfflineForzado) {
             _syncStatus.value = "Sincronizando con Spring Boot..."
             appContext?.let { ctx -> SyncWorker.encolarSincronizacion(ctx) }
             sincronizarConBackend()
